@@ -32,7 +32,6 @@ export const proposal = {
 
 export const purchaseOrderDraft = {
   number: '발주번호 PO-2026-1101',
-  status: '승인 대기',
   // 납품 희망일은 담당자가 바꿀 수 있어 날짜 입력용 형식(yyyy-mm-dd)으로 따로 둡니다.
   dueDate: '2026-11-03',
   info: [
@@ -97,8 +96,8 @@ export const historyPeriod = '조회 기간  2026.08.01 – 2026.10.19'
 
 export const historyStats = [
   { id: 'count', label: '누적 발주 건수', value: '24건', hint: '최근 3개월 기준' },
-  { id: 'amount', label: '누적 발주 금액', value: '₩58,940,000', hint: '이번 달 ₩10,566,000 (승인 대기 포함)' },
-  { id: 'pending', label: '승인 대기', value: '1건', hint: 'AI 제안서 생성 · 검토 필요' },
+  { id: 'amount', label: '누적 발주 금액', value: '₩58,940,000', hint: '이번 달 ₩10,566,000' },
+  { id: 'in-progress', label: '진행 중 발주', value: '2건', hint: '승인 완료 · 배송 중 · 입고 전' },
   { id: 'lead-time', label: '평균 납품 리드타임', value: '4.6일', hint: '공급사 약정 5일 이내' },
 ]
 
@@ -112,7 +111,7 @@ export const purchaseOrders = [
     quantity: '29,700개',
     amount: '₩10,566,000',
     deliveryAt: '2026.11.03',
-    status: '승인 대기',
+    status: '승인 완료',
     highlight: true,
   },
   {
@@ -199,8 +198,7 @@ export const historyTotalPages = 3
 // 필터 칩에 표시하는 건수는 현재 페이지가 아니라 전체 24건 기준입니다.
 export const historyStatusCounts = {
   total: 24,
-  '승인 대기': 1,
-  '승인 완료': 0,
+  '승인 완료': 1,
   '배송 중': 1,
   '입고 완료': 21,
   반려: 1,
@@ -213,13 +211,13 @@ export const historySortOptions = [
 ]
 
 // 발주서 상세 모달에서 쓰는 진행 단계
-export const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 대기', '발주 완료', '입고 완료']
+export const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 완료', '발주 완료', '입고 완료']
 
-// 상세 모달에 표시할 발주서별 상세 정보. 지금은 승인 대기 건만 채워져 있습니다.
+// 상세 모달에 표시할 발주서별 상세 정보. 지금은 가장 최근 건만 채워져 있습니다.
 export const purchaseOrderDetails = {
   'PO-2026-1101': {
     number: 'PO-2026-1101',
-    status: '승인 대기',
+    status: '승인 완료',
     currentStepIndex: 2,
     caption: 'PO-2026-1101 · AI 제안서 기반 (2026.10.19 09:00 생성)',
     info: [

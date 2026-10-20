@@ -8,7 +8,6 @@ import DataTable from '@/components/common/DataTable.vue'
 import DateField from '@/components/common/DateField.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import QuantityStepper from '@/components/common/QuantityStepper.vue'
-import StatusBadge from '@/components/common/StatusBadge.vue'
 import PurchaseOrderRejectModal from './PurchaseOrderRejectModal.vue'
 import { orderPeriod, proposal, purchaseOrderDraft } from '@/mocks/orders'
 
@@ -143,7 +142,6 @@ function handleReject({ reason }) {
         <template #header>
           <div class="card-title-row">
             <h2 class="card-title">박스 주문 발주서</h2>
-            <StatusBadge :label="purchaseOrderDraft.status" />
           </div>
         </template>
 

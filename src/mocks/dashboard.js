@@ -53,7 +53,7 @@ export const costSummary = {
     {
       id: 'next-order',
       label: '다음 달 박스 발주 예정',
-      hint: '29,700개 · 승인 대기',
+      hint: '29,700개 · 8개 규격',
       hintTone: 'muted',
       value: '₩10,566,000',
       valueTone: 'default',

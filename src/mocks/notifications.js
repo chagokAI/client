@@ -22,8 +22,8 @@ export const notifications = [
   {
     id: 'notif-3',
     category: '발주',
-    tone: 'warning',
-    title: '박스 주문 발주서 승인 대기',
+    tone: 'info',
+    title: '박스 주문 발주서가 공급사에 전송되었어요',
     detail: 'PO-2026-1101 · 29,700개 · ₩10,566,000',
     time: '1시간 전',
     unread: true,

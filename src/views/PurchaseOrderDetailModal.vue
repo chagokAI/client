@@ -13,7 +13,8 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['close', 'approve'])
+// 승인은 박스 주문 화면에서만 합니다. 이 모달은 조회 전용입니다.
+const emit = defineEmits(['close'])
 
 const columns = [
   { key: 'code', label: '규격', width: '13%' },
@@ -61,9 +62,6 @@ function downloadPdf() {
         <span aria-hidden="true">↓</span> PDF 다운로드
       </button>
       <AppButton @click="emit('close')">닫기</AppButton>
-      <AppButton v-if="detail.status === '승인 대기'" variant="primary" @click="emit('approve')">
-        승인하기
-      </AppButton>
     </template>
   </BaseModal>
 </template>

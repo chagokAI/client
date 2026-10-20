@@ -1,6 +1,6 @@
 <script setup>
 defineProps({
-  // 단계 라벨 배열. 예: ['제안서 생성', '발주서 작성', '승인 대기', ...]
+  // 단계 라벨 배열. 예: ['제안서 생성', '발주서 작성', '승인 완료', ...]
   steps: {
     type: Array,
     required: true,

@@ -45,42 +45,30 @@ const columns = [
   { key: 'detail', label: '상세보기', width: '8%' },
 ]
 
-const STATUSES = ['승인 대기', '승인 완료', '배송 중', '입고 완료', '반려']
+// 승인은 박스 주문 화면에서 끝나므로, 이력에는 승인 이후 상태만 나옵니다.
+const STATUSES = ['승인 완료', '배송 중', '입고 완료', '반려']
 
-// 승인하면 '승인 대기' 한 건이 '승인 완료'로 옮겨갑니다.
-const approvedCount = computed(() => orders.value.filter((item) => item.status === '승인 완료').length)
-
-const pendingCount = computed(() => orders.value.filter((item) => item.status === '승인 대기').length)
+// 아직 입고되지 않은 건 (승인 완료 + 배송 중)
+const inProgressCount = computed(
+  () => orders.value.filter((item) => item.status === '승인 완료' || item.status === '배송 중').length,
+)
 
 // 칩 건수는 전체 24건 기준이라 목록에 보이는 행 수와 다릅니다.
-// 현재 페이지에서 상태가 바뀐 만큼만 전체 건수에 반영합니다.
 const statusOptions = computed(() => {
   const chips = [{ value: 'all', label: '전체', count: historyStatusCounts.total }]
 
   STATUSES.forEach((status) => {
-    let count = historyStatusCounts[status]
-    if (status === '승인 대기') count = pendingCount.value
-    if (status === '승인 완료') count = approvedCount.value
-    if (count > 0 || status === '승인 대기') chips.push({ value: status, label: status, count })
+    const count = historyStatusCounts[status]
+    if (count > 0) chips.push({ value: status, label: status, count })
   })
 
   return chips
 })
 
-// 승인이 일어나면 상단 요약 카드의 '승인 대기' 건수도 함께 바뀝니다.
 const stats = computed(() =>
-  historyStats.map((stat) => {
-    // 승인이 끝나면 금액 카드의 꼬리말도 '승인 완료'로 바뀝니다.
-    if (stat.id === 'amount' && !pendingCount.value) {
-      return { ...stat, hint: stat.hint.replace('승인 대기 포함', '승인 완료') }
-    }
-    if (stat.id !== 'pending') return stat
-    return {
-      ...stat,
-      value: `${pendingCount.value}건`,
-      hint: pendingCount.value ? stat.hint : '대기 중인 발주서 없음',
-    }
-  }),
+  historyStats.map((stat) =>
+    stat.id === 'in-progress' ? { ...stat, value: `${inProgressCount.value}건` } : stat,
+  ),
 )
 
 const rows = computed(() => {
@@ -103,8 +91,9 @@ function openDetail(row) {
   openedDetail.value = { ...detail, status: row.status }
 }
 
-// 박스 주문 화면에서 납품 희망일을 바꿔 승인하면 목록의 납품(예정)일도 함께 바뀝니다.
-function approve(number, deliveryAt = '') {
+// 박스 주문 화면에서 승인하고 넘어오면 해당 건을 승인 완료로 반영합니다.
+// 납품 희망일을 바꿨다면 목록의 납품(예정)일도 함께 바뀝니다.
+function applyApproval(number, deliveryAt = '') {
   const formatted = deliveryAt ? deliveryAt.replaceAll('-', '.') : ''
 
   orders.value = orders.value.map((item) =>
@@ -112,7 +101,6 @@ function approve(number, deliveryAt = '') {
       ? { ...item, status: '승인 완료', deliveryAt: formatted || item.deliveryAt }
       : item,
   )
-  openedDetail.value = null
   toastMessage.value = `${number} 발주서가 승인되어 공급사(OO 포장산업)에 전송되었습니다.`
 }
 
@@ -120,7 +108,7 @@ function approve(number, deliveryAt = '') {
 onMounted(() => {
   const approved = route.query.approved
   if (!approved) return
-  approve(String(approved), route.query.deliveryAt ? String(route.query.deliveryAt) : '')
+  applyApproval(String(approved), route.query.deliveryAt ? String(route.query.deliveryAt) : '')
   router.replace({ path: '/purchase-orders' })
 })
 </script>
@@ -185,12 +173,7 @@ onMounted(() => {
       AI 제안서로 생성된 발주서는 담당자 승인 후 공급사에 전송됩니다.
     </p>
 
-    <PurchaseOrderDetailModal
-      v-if="openedDetail"
-      :detail="openedDetail"
-      @close="openedDetail = null"
-      @approve="approve(openedDetail.number)"
-    />
+    <PurchaseOrderDetailModal v-if="openedDetail" :detail="openedDetail" @close="openedDetail = null" />
 
     <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </div>
