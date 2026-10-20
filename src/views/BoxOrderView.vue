@@ -1,29 +1,53 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ApiState from '@/components/common/ApiState.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import DateField from '@/components/common/DateField.vue'
+import FilterChips from '@/components/common/FilterChips.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import QuantityStepper from '@/components/common/QuantityStepper.vue'
-import { orderPeriod, proposal, purchaseOrderDraft } from '@/mocks/orders'
+import StatusBadge from '@/components/common/StatusBadge.vue'
+import { auth, warehouseApi } from '@/stores/auth'
+import { JOB, costComparisons, currency, draftModel, localDate, monthPeriod, nextMonth, proposalModel } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
 
 const router = useRouter()
 
-// 수량은 사용자가 조정할 수 있어 복사본으로 들고 있습니다.
-const items = ref(purchaseOrderDraft.items.map((item) => ({ ...item })))
-const toastMessage = ref('')
-const dueDate = ref(purchaseOrderDraft.dueDate)
+// 박스 주문은 다음 달 발주를 준비하는 화면입니다.
+const targetMonth = nextMonth()
+const orderPeriod = `발주 대상 기간  ${monthPeriod(targetMonth)}`
 
 // 납품 희망일은 오늘보다 이전으로 잡을 수 없습니다.
-const today = new Date().toISOString().slice(0, 10)
+const today = localDate()
+
+const { loading, error, load } = useRemote()
+// 최신 제안서 조회 결과 { dataStatus, result, latestJob }
+const latest = ref(null)
+const comparisons = ref([])
+// 화면에서 지켜보는 참고 계산 작업
+const job = ref(null)
+// 공급사가 여러 곳이면 발주서도 공급사별로 나뉩니다.
+const drafts = ref([])
+const activeId = ref('')
+const busy = ref(false)
+const toastMessage = ref('')
+
+const proposal = computed(() => proposalModel(latest.value?.result))
+const activeDraft = computed(() => drafts.value.find((draft) => draft.id === activeId.value) ?? null)
+const draftOptions = computed(() =>
+  drafts.value.map((draft) => ({ value: draft.id, label: `${draft.supplierName} · ${draft.statusLabel}` })),
+)
+// 수량·납품일은 승인 대기 상태에서 운영자만 고칠 수 있습니다.
+const editable = computed(() => auth.canEdit.value && activeDraft.value?.status === 'PENDING')
 
 const proposalColumns = [
   { key: 'code', label: '규격', width: '16%' },
   { key: 'current', label: '현재 재고', width: '21%', align: 'right' },
-  { key: 'expected', label: '다음 달 예상 소모', width: '25%', align: 'right' },
+  { key: 'expected', label: '대상 월 참고 소모', width: '25%', align: 'right' },
   { key: 'safety', label: '안전 재고', width: '19%', align: 'right' },
   { key: 'suggested', label: '제안 수량', width: '19%', align: 'right' },
 ]
@@ -36,150 +60,338 @@ const orderColumns = [
   { key: 'amount', label: '금액', width: '21%', align: 'right' },
 ]
 
-const totalQuantity = computed(() => items.value.reduce((sum, item) => sum + item.quantity, 0))
+// 화면 합계는 미리보기입니다. 승인하면 서버가 저장 단가로 금액을 다시 계산합니다.
+const totalQuantity = computed(() => activeDraft.value?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0)
 
-const totalAmount = computed(() =>
-  items.value.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+const totalAmount = computed(
+  () => activeDraft.value?.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) ?? 0,
 )
 
+const canApprove = computed(
+  () => editable.value && !busy.value && totalQuantity.value > 0 && Boolean(activeDraft.value?.deliveryDate),
+)
+
+const ACTIVE_JOB = ['PENDING', 'RUNNING']
+const jobRunning = computed(() => ACTIVE_JOB.includes(job.value?.status))
+const jobFailed = computed(() => Boolean(job.value) && !jobRunning.value && job.value.status !== 'SUCCEEDED')
+
+const jobNotice = computed(() => {
+  if (jobRunning.value) return '참고 계산을 진행하고 있어요. 끝나면 제안서를 자동으로 다시 불러와요.'
+  if (!jobFailed.value) return ''
+  const reason = job.value.failure?.message ?? '원인을 확인할 수 없어요.'
+  return `${JOB[job.value.status] ?? job.value.status} · ${reason}${proposal.value ? ' 마지막으로 성공한 제안서를 보여 드려요.' : ''}`
+})
+
 function formatCurrency(value) {
-  return `₩${value.toLocaleString('ko-KR')}`
+  return currency(value)
 }
 
-function applyProposal() {
-  items.value = purchaseOrderDraft.items.map((item) => ({ ...item }))
-  toastMessage.value = 'AI 제안 수량이 발주서에 반영되었습니다.'
-}
-
-function approve() {
-  // TODO: 발주서 승인 API에 연결합니다. 수정한 수량과 납품 희망일을 함께 보냅니다.
-  router.push({
-    path: '/purchase-orders',
-    query: {
-      approved: purchaseOrderDraft.number,
-      deliveryAt: dueDate.value,
+function refresh() {
+  return load(
+    (signal) =>
+      Promise.all([
+        warehouseApi('/procurement-proposals/latest', { signal, query: { targetMonth } }),
+        warehouseApi('/cost-forecasts/latest', { signal, query: { targetMonth } }),
+      ]),
+    ([proposalResponse, costResponse]) => {
+      latest.value = proposalResponse.data
+      comparisons.value = costComparisons(costResponse.data.result)
+      watchJob(proposalResponse.data.latestJob)
     },
+  )
+}
+
+// 계산 작업은 접수(202)만 바로 끝나므로, 완료될 때까지 상태를 주기적으로 확인합니다.
+let pollTimer = null
+let disposed = false
+
+function watchJob(next) {
+  job.value = next
+  clearTimeout(pollTimer)
+  if (!disposed && ACTIVE_JOB.includes(next?.status)) pollTimer = setTimeout(pollJob, 2000)
+}
+
+async function pollJob() {
+  try {
+    const { data } = await warehouseApi(`/jobs/${job.value.id}`)
+    if (disposed) return
+    if (data.status !== 'SUCCEEDED') {
+      watchJob(data)
+      return
+    }
+    // 새 제안서가 생기면 이전 제안서로 만든 발주서 초안은 화면에서 내립니다.
+    job.value = data
+    drafts.value = []
+    activeId.value = ''
+    await refresh()
+    toastMessage.value = '새 제안서를 불러왔습니다.'
+  } catch (cause) {
+    // 확인을 멈추고 버튼을 다시 열어 둡니다. 다시 누르면 서버가 진행 중인 작업을 돌려줍니다.
+    job.value = null
+    toastMessage.value = cause.message
+  }
+}
+
+async function runJob() {
+  if (busy.value || jobRunning.value) return
+  busy.value = true
+  try {
+    const { data } = await warehouseApi('/ai-jobs', {
+      method: 'POST',
+      body: { targetMonth, type: 'PROCUREMENT_AND_COST' },
+    })
+    watchJob(data)
+  } catch (cause) {
+    toastMessage.value = cause.message
+  } finally {
+    busy.value = false
+  }
+}
+
+function setDrafts(orders) {
+  drafts.value = orders.map(draftModel)
+  // 아직 승인하지 않은 발주서를 먼저 보여 줍니다.
+  activeId.value = (drafts.value.find((draft) => draft.status === 'PENDING') ?? drafts.value[0])?.id ?? ''
+}
+
+// 같은 제안서로 다시 요청하면 서버가 이미 만든 초안을 그대로 돌려줍니다.
+// 그래서 다시 누르면 화면에서 고친 수량이 서버에 저장된 값으로 돌아갑니다.
+async function loadDrafts() {
+  const { data } = await warehouseApi('/purchase-orders/from-proposal', {
+    method: 'POST',
+    body: { proposalId: proposal.value.id },
   })
+  setDrafts(data.orders)
+  return data.orders
+}
+
+async function applyProposal() {
+  if (!proposal.value || busy.value) return
+  busy.value = true
+  try {
+    const orders = await loadDrafts()
+    toastMessage.value =
+      orders.length > 1
+        ? `공급사별 발주서 ${orders.length}건에 제안 수량이 반영되었습니다.`
+        : '제안 수량이 발주서에 반영되었습니다.'
+  } catch (cause) {
+    toastMessage.value = cause.message
+  } finally {
+    busy.value = false
+  }
+}
+
+async function approve() {
+  const draft = activeDraft.value
+  if (!draft || !canApprove.value) return
+  busy.value = true
+  try {
+    // 수량·납품일 변경과 승인을 한 번에 보내 서버에서 함께 반영합니다.
+    const changedItems = draft.items
+      .filter((item) => item.quantity !== item.savedQty)
+      .map((item) => ({ boxSpecId: item.id, qty: item.quantity }))
+    const { data } = await warehouseApi(`/purchase-orders/${draft.id}`, {
+      method: 'PATCH',
+      body: {
+        expectedVersion: draft.version,
+        status: 'APPROVED',
+        requestedDeliveryDate: draft.deliveryDate !== draft.savedDeliveryDate ? draft.deliveryDate : undefined,
+        items: changedItems.length ? changedItems : undefined,
+      },
+    })
+    drafts.value = drafts.value.map((item) => (item.id === data.id ? draftModel(data) : item))
+
+    const remaining = drafts.value.filter((item) => item.status === 'PENDING')
+    if (!remaining.length) {
+      router.push('/purchase-orders')
+      return
+    }
+    activeId.value = remaining[0].id
+    toastMessage.value = `${data.poNo} 발주서가 승인되었습니다. 남은 발주서 ${remaining.length}건도 확인해 주세요.`
+  } catch (cause) {
+    toastMessage.value = cause.message
+    // 다른 사람이 먼저 고쳤다면 최신 초안을 다시 불러옵니다.
+    if (cause.code === 'VERSION_CONFLICT') await loadDrafts().catch(() => {})
+  } finally {
+    busy.value = false
+  }
 }
 
 function goToHistory() {
   router.push('/purchase-orders')
 }
+
+onMounted(refresh)
+
+onBeforeUnmount(() => {
+  disposed = true
+  clearTimeout(pollTimer)
+})
 </script>
 
 <template>
   <div class="box-order">
     <PageHeader
       title="박스 주문"
-      description="AI가 작성한 박스 주문 제안서를 검토하고, 발주서를 승인하세요."
+      description="박스 주문 제안서를 검토하고, 공급사별 발주서를 승인하세요."
       :meta="orderPeriod"
     />
+
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
 
     <div class="box-order__columns">
       <AppCard class="proposal">
         <template #header>
           <div class="card-title-row">
             <h2 class="card-title">박스 주문 제안서</h2>
-            <span class="ai-tag">AI 생성</span>
+            <span v-if="proposal" class="ai-tag">{{ proposal.baseline ? '참고 계산' : 'AI 생성' }}</span>
           </div>
         </template>
 
         <template #actions>
-          <span class="card-meta">{{ proposal.createdAt }}</span>
+          <span v-if="proposal" class="card-meta">{{ proposal.createdAt }}</span>
+          <AppButton size="sm" :disabled="!auth.canEdit.value || busy || jobRunning" @click="runJob">
+            {{ jobRunning ? '계산 중…' : proposal ? '다시 계산' : '계산 실행' }}
+          </AppButton>
         </template>
 
-        <div class="proposal__headline">
-          <p class="proposal__headline-text">{{ proposal.headline }}</p>
-          <p class="proposal__headline-sub">{{ proposal.subline }}</p>
-        </div>
+        <p v-if="jobNotice" class="job-notice" :class="{ 'job-notice--error': jobFailed }" role="status">
+          {{ jobNotice }}
+        </p>
 
-        <DataTable class="proposal__table" :columns="proposalColumns" :rows="proposal.rows" row-key="id">
-          <template #cell-code="{ row }">
-            <strong>{{ row.code }}</strong>
-          </template>
-          <template #cell-suggested="{ row }">
-            <strong>{{ row.suggested }}</strong>
-          </template>
-        </DataTable>
+        <template v-if="proposal">
+          <div class="proposal__headline">
+            <p class="proposal__headline-text">{{ proposal.headline }}</p>
+            <p class="proposal__headline-sub">{{ proposal.subline }}</p>
+          </div>
 
-        <section class="rationale">
-          <h3 class="rationale__title">제안 근거</h3>
-          <ul class="rationale__list">
-            <li v-for="reason in proposal.rationale" :key="reason">{{ reason }}</li>
+          <DataTable class="proposal__table" :columns="proposalColumns" :rows="proposal.rows" row-key="id">
+            <template #cell-code="{ row }">
+              <strong>{{ row.code }}</strong>
+            </template>
+            <template #cell-suggested="{ row }">
+              <strong>{{ row.suggested }}</strong>
+            </template>
+          </DataTable>
+
+          <section v-if="proposal.rationale.length" class="rationale">
+            <h3 class="rationale__title">제안 근거</h3>
+            <ul class="rationale__list">
+              <li v-for="reason in proposal.rationale" :key="reason">{{ reason }}</li>
+            </ul>
+          </section>
+
+          <div class="proposal__total">
+            <span class="proposal__total-label">예상 총 주문금액 (VAT 별도)</span>
+            <strong class="proposal__total-value">{{ proposal.totalAmount }}</strong>
+          </div>
+
+          <ul v-if="comparisons.length" class="comparison">
+            <li v-for="item in comparisons" :key="item.id" class="comparison__item">
+              <p class="comparison__label">{{ item.label }}</p>
+              <p class="comparison__change">{{ item.change }}</p>
+            </li>
           </ul>
-        </section>
 
-        <div class="proposal__total">
-          <span class="proposal__total-label">예상 총 주문금액 (VAT 별도)</span>
-          <strong class="proposal__total-value">{{ proposal.totalAmount }}</strong>
+          <AppButton
+            class="proposal__apply"
+            variant="secondary"
+            block
+            :disabled="!auth.canEdit.value || busy || !proposal.totalQty"
+            @click="applyProposal"
+          >
+            발주서에 반영하기 <span aria-hidden="true">→</span>
+          </AppButton>
+          <p v-if="!auth.canEdit.value" class="card-hint">발주서는 운영자 이상 권한으로 만들 수 있어요.</p>
+        </template>
+
+        <div v-else-if="latest" class="empty-state">
+          <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
+          <p class="empty-state__text">
+            [계산 실행]을 누르면 최근 관측 이력으로 참고 제안서를 만들어요.
+            활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요.
+          </p>
         </div>
-
-        <ul class="comparison">
-          <li v-for="item in proposal.comparisons" :key="item.id" class="comparison__item">
-            <p class="comparison__label">{{ item.label }}</p>
-            <p class="comparison__change">{{ item.change }}</p>
-          </li>
-        </ul>
-
-        <AppButton class="proposal__apply" variant="secondary" block @click="applyProposal">
-          발주서에 반영하기 <span aria-hidden="true">→</span>
-        </AppButton>
       </AppCard>
 
       <AppCard class="purchase-order">
         <template #header>
           <div class="card-title-row">
             <h2 class="card-title">박스 주문 발주서</h2>
+            <StatusBadge v-if="activeDraft" :label="activeDraft.statusLabel" />
           </div>
         </template>
 
-        <dl class="order-info">
-          <div v-for="field in purchaseOrderDraft.info" :key="field.id" class="order-info__field">
-            <dt :id="`order-info-${field.id}`">{{ field.label }}</dt>
-            <dd v-if="field.editable === 'date'" class="order-info__value--editable">
-              <DateField
-                v-model="dueDate"
-                :min="today"
-                show-weekday
-                :aria-label="field.label"
-              />
-            </dd>
-            <dd v-else>{{ field.value }}</dd>
+        <template v-if="activeDraft">
+          <FilterChips
+            v-if="drafts.length > 1"
+            v-model="activeId"
+            class="purchase-order__suppliers"
+            :options="draftOptions"
+            aria-label="공급사별 발주서"
+          />
+
+          <dl class="order-info">
+            <div v-for="field in activeDraft.info" :key="field.id" class="order-info__field">
+              <dt :id="`order-info-${field.id}`">{{ field.label }}</dt>
+              <dd v-if="field.id === 'due-date' && editable" class="order-info__value--editable">
+                <DateField
+                  v-model="activeDraft.deliveryDate"
+                  :min="today"
+                  show-weekday
+                  :aria-label="field.label"
+                />
+              </dd>
+              <dd v-else>{{ field.value }}</dd>
+            </div>
+          </dl>
+
+          <DataTable class="purchase-order__table" :columns="orderColumns" :rows="activeDraft.items" row-key="id">
+            <template #cell-code="{ row }">
+              <strong>{{ row.code }}</strong>
+            </template>
+
+            <template #cell-quantity="{ row }">
+              <QuantityStepper v-if="editable" v-model="row.quantity" :min="0" :ariaLabel="`${row.code} 수량`" />
+              <span v-else>{{ row.quantity.toLocaleString('ko-KR') }}개</span>
+            </template>
+
+            <template #cell-unitPrice="{ row }">
+              {{ formatCurrency(row.unitPrice) }}
+            </template>
+
+            <template #cell-amount="{ row }">
+              {{ formatCurrency(row.quantity * row.unitPrice) }}
+            </template>
+          </DataTable>
+
+          <div class="purchase-order__total">
+            <span class="purchase-order__total-quantity">
+              총 수량 <strong>{{ totalQuantity.toLocaleString('ko-KR') }}개</strong>
+            </span>
+            <span class="purchase-order__total-amount">
+              합계 (VAT 별도) <strong>{{ formatCurrency(totalAmount) }}</strong>
+            </span>
           </div>
-        </dl>
 
-        <DataTable class="purchase-order__table" :columns="orderColumns" :rows="items" row-key="id">
-          <template #cell-code="{ row }">
-            <strong>{{ row.code }}</strong>
-          </template>
+          <p class="purchase-order__note">
+            <template v-if="editable">
+              제안서 수량이 자동으로 입력되었습니다. −/+ 버튼으로 100개 단위로 수정하면 총 수량과 합계가 바로 바뀝니다.
+              수량을 0으로 두면 해당 규격은 발주에서 빠집니다.
+            </template>
+            <template v-else-if="activeDraft.status !== 'PENDING'">이미 처리된 발주서예요. 진행 상태는 발주서 이력에서 확인할 수 있어요.</template>
+            <template v-else>발주서 수정과 승인은 운영자 이상 권한으로 할 수 있어요.</template>
+          </p>
+        </template>
 
-          <template #cell-quantity="{ row }">
-            <QuantityStepper v-model="row.quantity" :min="0" :ariaLabel="`${row.code} 수량`" />
-          </template>
-
-          <template #cell-unitPrice="{ row }">
-            {{ formatCurrency(row.unitPrice) }}
-          </template>
-
-          <template #cell-amount="{ row }">
-            {{ formatCurrency(row.quantity * row.unitPrice) }}
-          </template>
-        </DataTable>
-
-        <div class="purchase-order__total">
-          <span class="purchase-order__total-quantity">
-            총 수량 <strong>{{ totalQuantity.toLocaleString('ko-KR') }}개</strong>
-          </span>
-          <span class="purchase-order__total-amount">
-            합계 (VAT 별도) <strong>{{ formatCurrency(totalAmount) }}</strong>
-          </span>
+        <div v-else class="empty-state">
+          <p class="empty-state__title">아직 불러온 발주서가 없어요.</p>
+          <p class="empty-state__text">제안서의 [발주서에 반영하기]를 누르면 공급사별 발주서 초안이 만들어져요.</p>
         </div>
-
-        <p class="purchase-order__note">{{ purchaseOrderDraft.note }}</p>
 
         <div class="purchase-order__actions">
           <AppButton size="lg" @click="goToHistory">이력 보러 가기</AppButton>
-          <AppButton size="lg" variant="primary" @click="approve">승인하기</AppButton>
+          <AppButton size="lg" variant="primary" :disabled="!canApprove" @click="approve">승인하기</AppButton>
         </div>
       </AppCard>
     </div>
@@ -227,6 +439,54 @@ function goToHistory() {
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
+}
+
+.card-hint {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 계산 작업 상태 */
+.job-notice {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.job-notice--error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+/* 제안서·발주서가 아직 없을 때 */
+.empty-state {
+  padding: 32px 16px;
+  border: 1px dashed var(--color-card-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.empty-state__text {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: keep-all;
 }
 
 /* 제안서 */
@@ -356,6 +616,10 @@ function goToHistory() {
 }
 
 /* 발주서 */
+.purchase-order__suppliers {
+  margin-bottom: 16px;
+}
+
 .order-info {
   display: grid;
   gap: 14px 24px;

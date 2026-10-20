@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '@/views/LoginView.vue'
+import { auth, resetSession } from '@/stores/auth'
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -60,6 +61,22 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 }),
+})
+
+router.beforeEach(async (to) => {
+  try {
+    const session = await auth.restore()
+    if (!session && to.name !== 'login') return { name: 'login', query: { redirect: to.fullPath } }
+    if (session && to.name === 'login') return { name: 'dashboard' }
+  } catch {
+    if (to.name !== 'login') return { name: 'login', query: { connection: 'unavailable' } }
+  }
+})
+
+window.addEventListener('auth:expired', () => {
+  const redirect = router.currentRoute.value.fullPath
+  resetSession()
+  if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login', query: { redirect } })
 })
 
 router.afterEach((to) => {

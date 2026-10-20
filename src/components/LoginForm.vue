@@ -1,7 +1,8 @@
 <script setup>
 import { nextTick, reactive, useTemplateRef } from 'vue'
 
-defineProps({
+const props = defineProps({
+  busy: Boolean,
   message: {
     type: String,
     default: '',
@@ -26,6 +27,7 @@ function clearError(field) {
 }
 
 async function handleSubmit() {
+  if (props.busy) return
   const employeeId = form.employeeId.trim()
   errors.employeeId = employeeId ? '' : '사내번호를 입력해 주세요.'
   errors.password = form.password ? '' : '비밀번호를 입력해 주세요.'
@@ -97,7 +99,7 @@ async function handleSubmit() {
       <span>로그인 상태 유지</span>
     </label>
 
-    <button class="login-form__submit" type="submit">로그인</button>
+    <button class="login-form__submit" type="submit" :disabled="busy">{{ busy ? '로그인 중…' : '로그인' }}</button>
 
     <p v-if="message" class="login-form__message" role="status">{{ message }}</p>
 

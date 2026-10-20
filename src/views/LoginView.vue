@@ -1,17 +1,25 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { auth } from '@/stores/auth'
 import BrandPanel from '../components/BrandPanel.vue'
 import LoginForm from '../components/LoginForm.vue'
 
 const router = useRouter()
-const message = ref('')
+const route = useRoute()
+const message = ref(route.query.connection ? '서버에 연결할 수 없습니다. 연결 상태를 확인해 주세요.' : '')
+const busy = ref(false)
 
-function handleLogin() {
-  // TODO: submit 이벤트의 { employeeId, password, rememberMe }를 받아 인증 API에 연결합니다.
-  // 인증이 붙기 전까지는 입력값 검증만 통과하면 대시보드로 이동합니다.
-  message.value = ''
-  router.push('/dashboard')
+async function handleLogin(input) {
+  if (busy.value) return
+  busy.value = true; message.value = ''
+  try {
+    await auth.login(input)
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//')
+      ? route.query.redirect : '/dashboard'
+    await router.replace(redirect)
+  } catch (error) { message.value = error.message }
+  finally { busy.value = false }
 }
 </script>
 
@@ -20,7 +28,7 @@ function handleLogin() {
     <BrandPanel />
 
     <main class="login-page__main">
-      <LoginForm :message="message" @submit="handleLogin" @change="message = ''" />
+      <LoginForm :message="message" :busy="busy" @submit="handleLogin" @change="message = ''" />
     </main>
 
     <footer class="login-page__mobile-footer">

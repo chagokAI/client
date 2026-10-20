@@ -1,107 +1,86 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import BoxSpecDeleteBlockedModal from './BoxSpecDeleteBlockedModal.vue'
 import BoxSpecDeleteModal from './BoxSpecDeleteModal.vue'
 import BoxSpecFormModal from './BoxSpecFormModal.vue'
-import { boxSpecs, specSummary } from '@/mocks/boxes'
-import { openPurchaseOrderOptions } from '@/mocks/orders'
-
-const keyword = ref('')
-const statusFilter = ref('all')
-const specs = ref(boxSpecs.map((item) => ({ ...item })))
-
-// 열려 있는 모달 상태. editingSpec이 null이면 신규 등록입니다.
-const formModal = ref(null)
-const deletingSpec = ref(null)
-const blockedSpec = ref(null)
-const toastMessage = ref('')
-
-// 진행 중인 발주서에 들어 있는 규격은 삭제할 수 없습니다.
-function openOrderFor(spec) {
-  return openPurchaseOrderOptions.find((order) => order.specIds.includes(spec.id))?.value ?? ''
-}
-
-function canDelete(spec) {
-  return spec.status === '미사용' && spec.linkedProducts === 0 && !openOrderFor(spec)
-}
-
-// 삭제 확인 모달에서 한 번 더 조건을 검사합니다.
-// 다른 담당자가 그 사이 규격을 사용 중으로 바꿨을 수 있어서입니다.
-function requestDelete() {
-  const target = deletingSpec.value
-  if (!canDelete(target)) {
-    deletingSpec.value = null
-    blockedSpec.value = target
-    return
-  }
-  handleDelete()
-}
-
+import ApiState from '@/components/common/ApiState.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import { auth, warehouseApi } from '@/stores/auth'
+import { specRow, number } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
+const keyword = ref(''), statusFilter = ref('all'), page = ref(1), totalPages = ref(0)
+const specs = ref([]), counts = ref({}), summary = ref(null)
+const formModal = ref(null), deletingSpec = ref(null), toastMessage = ref(''), saving = ref(false)
+const { loading, error, load } = useRemote()
 const columns = [
-  { key: 'code', label: '박스 규격명', width: '10%' },
-  { key: 'sizeName', label: '박스 사이즈명', width: '10%' },
-  { key: 'dimensions', label: '내경 사이즈 (가로 × 세로 × 높이)', width: '17%' },
-  { key: 'material', label: '재질', width: '10%' },
-  { key: 'supplier', label: '공급사', width: '11%' },
-  { key: 'description', label: '간단 설명', width: '20%' },
-  { key: 'linkedProducts', label: '연결 상품', width: '8%' },
-  { key: 'status', label: '사용 여부', width: '8%' },
-  { key: 'actions', label: '관리', width: '12%' },
+  { key: 'code', label: '박스 규격명', width: '10%' }, { key: 'sizeName', label: '박스 사이즈명', width: '10%' },
+  { key: 'dimensions', label: '내경 사이즈 (가로 × 세로 × 높이)', width: '17%' }, { key: 'material', label: '재질', width: '10%' },
+  { key: 'supplier', label: '공급사', width: '11%' }, { key: 'description', label: '간단 설명', width: '20%' },
+  { key: 'linkedProducts', label: '연결 상품', width: '8%' }, { key: 'status', label: '사용 여부', width: '8%' }, { key: 'actions', label: '관리', width: '12%' },
 ]
-
-const statusOptions = computed(() => [
-  { value: 'all', label: '전체', count: specs.value.length },
-  { value: '사용 중', label: '사용 중', count: specs.value.filter((item) => item.status === '사용 중').length },
-  { value: '미사용', label: '미사용', count: specs.value.filter((item) => item.status === '미사용').length },
-  { value: 'custom', label: '★ 커스텀', count: specs.value.filter((item) => item.custom).length },
-])
-
-const rows = computed(() => {
-  const trimmed = keyword.value.trim().toLowerCase()
-
-  return specs.value.filter((item) => {
-    if (statusFilter.value === 'custom' && !item.custom) return false
-    if (statusFilter.value !== 'all' && statusFilter.value !== 'custom' && item.status !== statusFilter.value) {
-      return false
-    }
-    if (!trimmed) return true
-    return `${item.code} ${item.sizeName}`.toLowerCase().includes(trimmed)
-  })
-})
-
-function openCreate() {
-  formModal.value = { spec: null }
+const statusOptions = computed(() => [{ value: 'all', label: '전체', count: counts.value.ALL ?? 0 }, { value: 'ACTIVE', label: '사용 중', count: counts.value.ACTIVE ?? 0 },
+  { value: 'INACTIVE', label: '미사용', count: counts.value.INACTIVE ?? 0 }, { value: 'CUSTOM', label: '★ 커스텀', count: counts.value.CUSTOM ?? 0 }])
+const rows = computed(() => specs.value)
+const specSummary = computed(() => `총 ${number(summary.value?.totalSpecCount)}개 규격 · 표준 ${number(summary.value?.standardSpecCount)} · 커스텀 ${number(summary.value?.customSpecCount)}`)
+const supplierOptions = ref([{ value: '', label: '미지정' }])
+function refresh() {
+  return load(signal => warehouseApi('/box-specs', { signal, query: { keyword: keyword.value, page: page.value - 1, size: 100,
+    active: statusFilter.value === 'ACTIVE' ? true : statusFilter.value === 'INACTIVE' ? false : undefined,
+    custom: statusFilter.value === 'CUSTOM' ? true : undefined } }), ({ data }) => {
+      specs.value = data.items.map(specRow); counts.value = data.counts; summary.value = data.summary; totalPages.value = data.totalPages
+    })
 }
-
-function openEdit(spec) {
-  formModal.value = { spec }
+async function loadSuppliers() {
+  // 공급사 조회 API 연결 전에는 저장된 규격의 공급사만 선택할 수 있다.
+  try { const { data } = await warehouseApi('/box-specs', { query: { size: 100 } });
+    const suppliers = new Map(data.items.filter(b => b.supplier).map(b => [b.supplier.id, { value: b.supplier.id, label: b.supplier.name }]))
+    supplierOptions.value = [{ value: '', label: '미지정' }, ...suppliers.values()]
+  } catch (cause) { toastMessage.value = cause.message }
 }
-
-function handleSave() {
-  // TODO: 저장 API 응답으로 목록을 갱신합니다.
-  const isEditing = Boolean(formModal.value?.spec)
-  toastMessage.value = isEditing ? '박스 규격이 수정되었습니다.' : '새 박스 규격이 등록되었습니다.'
-  formModal.value = null
+watch([keyword, statusFilter], () => { if (page.value !== 1) page.value = 1; else refresh() }); watch(page, refresh)
+onMounted(() => { refresh(); loadSuppliers() })
+function openCreate() { formModal.value = { spec: null } }
+function openEdit(spec) { formModal.value = { spec } }
+async function handleSave(form) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    const dims = [form.width, form.depth, form.height].map(Number)
+    if (!form.code.trim() || !form.sizeName.trim() || dims.some(v => !Number.isInteger(v) || v <= 0) || !Number.isInteger(Number(form.unitPriceKrw)) || Number(form.unitPriceKrw) < 0)
+      throw new Error('규격명·사이즈명, 양수 정수 치수와 0 이상 단가를 입력하세요.')
+    const target = formModal.value.spec
+    const body = { code: form.code.trim(), name: form.sizeName.trim(), sizeClass: form.sizeClass,
+      innerWidthMm: dims[0], innerDepthMm: dims[1], innerHeightMm: dims[2], material: form.material,
+      supplierId: form.supplier || undefined, unitPriceKrw: Number(form.unitPriceKrw), isCustom: form.kind === 'custom',
+      isActive: form.inUse, description: form.description }
+    if (target) body.expectedVersion = target.version
+    else { body.initialOnHandQty = Number(form.initialOnHandQty); body.safetyQty = Number(form.safetyQty); if (form.targetQty !== '') body.targetQty = Number(form.targetQty) }
+    await warehouseApi(target ? `/box-specs/${target.id}` : '/box-specs', { method: target ? 'PATCH' : 'POST', body })
+    formModal.value = null; toastMessage.value = '박스 규격이 저장되었습니다.'; await refresh(); loadSuppliers()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
-
-function handleDelete() {
-  specs.value = specs.value.filter((item) => item.id !== deletingSpec.value.id)
-  toastMessage.value = `${deletingSpec.value.code} 규격이 삭제되었습니다.`
-  deletingSpec.value = null
+async function requestDelete() {
+  if (saving.value) return
+  saving.value = true
+  try { await warehouseApi(`/box-specs/${deletingSpec.value.id}`, { method: 'DELETE', query: { expectedVersion: deletingSpec.value.version } });
+    deletingSpec.value = null; toastMessage.value = '규격이 삭제되었습니다.'; await refresh()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
 </script>
 
 <template>
   <div class="box-spec">
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
     <!-- '+ 규격 추가'는 페이지 제목 줄에 붙습니다. 부모 뷰가 만든 자리에 끼워 넣습니다. -->
     <Teleport defer to="#box-management-actions">
-      <AppButton variant="primary" @click="openCreate">+ 규격 추가</AppButton>
+      <AppButton variant="primary" :disabled="!auth.canEdit.value" @click="openCreate">+ 규격 추가</AppButton>
     </Teleport>
 
     <div class="box-spec__filters">
@@ -133,13 +112,13 @@ function handleDelete() {
 
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <AppButton size="sm" @click="openEdit(row)">수정</AppButton>
+          <AppButton size="sm" :disabled="!auth.canEdit.value" @click="openEdit(row)">수정</AppButton>
           <!-- 연결 상품이 있는 규격은 삭제할 수 없어 미사용 규격에만 삭제 버튼을 둡니다. -->
           <AppButton
             v-if="row.status === '미사용'"
             size="sm"
             variant="danger-outline"
-            @click="deletingSpec = row"
+            :disabled="!auth.canEdit.value" @click="deletingSpec = row"
           >
             삭제
           </AppButton>
@@ -153,13 +132,14 @@ function handleDelete() {
         우리 물류센터에서 자체 제작한 박스 규격이에요. 표시가 없는 규격은 시중 표준 규격(택배 박스 호수 기준)입니다.
       </p>
       <p class="box-spec__footnote box-spec__footnote--plain">
-        박스 규격을 수정하면 연결된 상품의 매칭 결과와 재고 기준이 다시 계산됩니다.
+        박스 규격을 수정하면 연결된 상품의 매칭 적합 여부와 비율이 다시 계산됩니다.
       </p>
     </div>
 
+    <Pagination v-if="totalPages > 1" v-model="page" :total-pages="totalPages" />
     <BoxSpecFormModal
       v-if="formModal"
-      :spec="formModal.spec"
+      :spec="formModal.spec" :suppliers="supplierOptions" :busy="saving"
       @close="formModal = null"
       @save="handleSave"
     />
@@ -171,13 +151,7 @@ function handleDelete() {
       @confirm="requestDelete"
     />
 
-    <BoxSpecDeleteBlockedModal
-      v-if="blockedSpec"
-      :spec="blockedSpec"
-      :open-order-number="openOrderFor(blockedSpec)"
-      @close="blockedSpec = null"
-      @view-products="$router.push('/boxes/matching')"
-    />
+
 
     <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </div>

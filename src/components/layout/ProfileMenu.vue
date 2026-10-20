@@ -1,6 +1,10 @@
 <script setup>
 import SelectField from '../common/SelectField.vue'
-import { centerOptions, currentUser } from '@/mocks/user'
+import { computed } from 'vue'
+import { auth } from '@/stores/auth'
+
+const currentUser = computed(() => ({ ...auth.session.value, initial: auth.session.value?.name?.slice(0, 1) ?? '', team: auth.session.value?.department ?? '', role: ({ VIEWER: '조회자', OPERATOR: '운영자', ADMIN: '관리자' })[auth.session.value?.role] ?? '' }))
+const centerOptions = computed(() => (auth.session.value?.warehouses ?? []).map(w => ({ value: w.id, label: w.name })))
 
 defineProps({
   centerId: {

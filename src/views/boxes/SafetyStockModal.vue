@@ -9,6 +9,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 
 const props = defineProps({
+  busy: Boolean,
   spec: {
     type: Object,
     required: true,
@@ -18,16 +19,18 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 const form = reactive({
-  safetyDays: props.spec.safetyDays,
-  alertEnabled: props.spec.alertEnabled,
+  safetyDays: props.spec.safetyDays ?? 7,
+  safetyQuantity: props.spec.safetyQty ?? 0,
+  alertEnabled: props.spec.alertEnabled ?? true,
 })
 
 // 안전 재고 수량은 '일 평균 소모량 × 기준 일수'로 자동 계산되는 읽기 전용 값입니다.
-const safetyQuantity = computed(() => props.spec.dailyUsage * Number(form.safetyDays || 0))
+const useDays = props.spec.dailyUsage != null
+const safetyQuantity = computed(() => useDays ? Math.ceil(props.spec.dailyUsage * Number(form.safetyDays || 0)) : form.safetyQuantity)
 
 function handleSave() {
-  // TODO: 안전 재고 기준 저장 API에 연결합니다.
-  emit('save', { ...form, safetyQuantity: safetyQuantity.value })
+  if (props.busy) return
+  emit('save', { ...form, useDays, safetyQuantity: safetyQuantity.value })
 }
 </script>
 
@@ -47,8 +50,9 @@ function handleSave() {
         <FormField
           v-slot="{ fieldId }"
           label="안전 재고 기준"
+          v-if="useDays"
           required
-          hint="일 평균 소모량 기준으로 자동 계산"
+          :hint="useDays ? '참고 일평균 기준, 저장할 때 확정' : '참고 수량이 없어 안전 재고를 직접 입력하세요'"
         >
           <TextInput :id="fieldId" v-model="form.safetyDays" suffix="일분" format-number aria-label="안전 재고 기준 일수" />
         </FormField>
@@ -56,16 +60,17 @@ function handleSave() {
         <FormField
           v-slot="{ fieldId }"
           label="안전 재고 수량"
-          :hint="`일 평균 ${spec.dailyUsage}개 × ${form.safetyDays || 0}일`"
+          :hint="useDays ? `참고 일평균 ${spec.dailyUsage}개 × ${form.safetyDays || 0}일` : '직접 지정한 안전 재고 수량'"
         >
-          <TextInput :id="fieldId" :model-value="safetyQuantity" suffix="개" format-number readonly aria-label="안전 재고 수량" />
+          <TextInput v-if="useDays" :id="fieldId" :model-value="safetyQuantity" suffix="개" format-number readonly aria-label="안전 재고 수량" />
+          <TextInput v-else :id="fieldId" v-model="form.safetyQuantity" suffix="개" format-number aria-label="안전 재고 수량" />
         </FormField>
       </div>
 
       <FormField v-slot="{ fieldId }" label="공급사 리드타임">
         <TextInput
           :id="fieldId"
-          :model-value="`${spec.leadTimeDays}일 · ${spec.supplier}`"
+          :model-value="`${spec.leadTimeDays ?? '—'}일 · ${spec.supplier}`"
           suffix="공급사 정보"
           readonly
           aria-label="공급사 리드타임"
@@ -85,7 +90,7 @@ function handleSave() {
 
     <template #footer>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" @click="handleSave">저장하기</AppButton>
+      <AppButton variant="primary" :disabled="busy" @click="handleSave">저장하기</AppButton>
     </template>
   </BaseModal>
 </template>
