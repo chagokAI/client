@@ -111,7 +111,7 @@ function handleSubmit() {
         </div>
       </div>
 
-      <FormField v-slot="{ fieldId }" label="메모">
+      <FormField v-slot="{ fieldId }" label="이상사항">
         <textarea
           :id="fieldId"
           v-model="form.memo"
