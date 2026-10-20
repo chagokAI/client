@@ -10,12 +10,50 @@
   --color-navy: #202a38;
   --color-gold: #dda632;
   --color-brown: #603c22;
+  --color-brown-dark: #4d2e18;
+  --color-brown-darker: #3c2413;
   --color-white: #ffffff;
   --color-text: #202a38;
   --color-text-secondary: #4b5565;
   --color-text-muted: #98a2b3;
   --color-border: #e8c9aa;
   --color-error: #ba3b32;
+
+  /* 카드·표의 테두리는 입력 필드보다 한 단계 옅은 베이지를 씁니다. */
+  --color-card-border: #f0dfc9;
+  --color-cream: #fdf5ec;
+  --color-cream-strong: #faeeda;
+  --color-divider: #f1eae1;
+
+  /* 상태 색: 정상(파랑) · 주의(노랑) · 부족(빨강) · 완료(초록) · 비활성(회색) */
+  --color-info: #2f6fe4;
+  --color-info-bg: #eaf1fd;
+  --color-info-text: #2a5fc4;
+  --color-warning: #d99b2b;
+  --color-warning-bg: #fdf3e2;
+  --color-warning-text: #a3700f;
+  --color-danger: #e03131;
+  --color-danger-bg: #fdecec;
+  --color-danger-text: #c0392b;
+  --color-success: #2f9e5e;
+  --color-success-bg: #e9f6ee;
+  --color-success-text: #1f7a46;
+  --color-neutral-bg: #f1f2f4;
+  --color-neutral-text: #6b7280;
+
+  --shadow-card: 0 1px 2px rgb(32 42 56 / 4%);
+  --shadow-popover: 0 12px 32px rgb(32 42 56 / 14%);
+  --shadow-modal: 0 24px 64px rgb(32 42 56 / 24%);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* 1440 기준 디자인에서 좌우 여백 48px을 뺀 본문 최대 너비 */
+  --layout-max-width: 1344px;
+  --layout-gutter: 48px;
+  --header-height: 60px;
 }
 
 *,
@@ -30,12 +68,16 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
 button,
 input,
+select,
+textarea,
 label {
   -webkit-tap-highlight-color: transparent;
 }

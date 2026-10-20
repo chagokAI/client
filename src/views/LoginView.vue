@@ -1,14 +1,17 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import BrandPanel from '../components/BrandPanel.vue'
 import LoginForm from '../components/LoginForm.vue'
 
+const router = useRouter()
 const message = ref('')
 
 function handleLogin() {
   // TODO: submit 이벤트의 { employeeId, password, rememberMe }를 받아 인증 API에 연결합니다.
-  // 현재는 서버 요청이나 로그인 성공 처리 없이 준비 안내만 표시합니다.
-  message.value = '현재 로그인 서비스를 준비하고 있습니다. 시스템 관리자에게 문의해 주세요.'
+  // 인증이 붙기 전까지는 입력값 검증만 통과하면 대시보드로 이동합니다.
+  message.value = ''
+  router.push('/dashboard')
 }
 </script>
 
