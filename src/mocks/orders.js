@@ -31,7 +31,7 @@ export const proposal = {
 }
 
 export const purchaseOrderDraft = {
-  number: '발주번호 PO-2026-1101',
+  number: 'PO-2026-1101',
   // 납품 희망일은 담당자가 바꿀 수 있어 날짜 입력용 형식(yyyy-mm-dd)으로 따로 둡니다.
   dueDate: '2026-11-03',
   info: [

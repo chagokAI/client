@@ -58,7 +58,7 @@ function approve() {
   router.push({
     path: '/purchase-orders',
     query: {
-      approved: purchaseOrderDraft.number.replace('발주번호 ', ''),
+      approved: purchaseOrderDraft.number,
       deliveryAt: dueDate.value,
     },
   })
@@ -66,7 +66,7 @@ function approve() {
 
 // 반려 모달에 보여 줄 발주서 요약
 const rejectTarget = computed(() => ({
-  number: purchaseOrderDraft.number.replace('발주번호 ', ''),
+  number: purchaseOrderDraft.number,
   supplier: purchaseOrderDraft.info.find((field) => field.id === 'supplier')?.value ?? '',
   quantity: `${totalQuantity.value.toLocaleString('ko-KR')}개`,
   amount: formatCurrency(totalAmount.value),
@@ -143,10 +143,6 @@ function handleReject({ reason }) {
           <div class="card-title-row">
             <h2 class="card-title">박스 주문 발주서</h2>
           </div>
-        </template>
-
-        <template #actions>
-          <span class="card-meta">{{ purchaseOrderDraft.number }}</span>
         </template>
 
         <dl class="order-info">
