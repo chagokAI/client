@@ -46,7 +46,7 @@ const columns = [
 ]
 
 // 승인은 박스 주문 화면에서 끝나므로, 이력에는 승인 이후 상태만 나옵니다.
-const STATUSES = ['승인 완료', '배송 중', '입고 완료', '반려']
+const STATUSES = ['승인 완료', '배송 중', '입고 완료']
 
 // 아직 입고되지 않은 건 (승인 완료 + 배송 중)
 const inProgressCount = computed(

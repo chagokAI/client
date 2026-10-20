@@ -8,7 +8,6 @@ import DataTable from '@/components/common/DataTable.vue'
 import DateField from '@/components/common/DateField.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import QuantityStepper from '@/components/common/QuantityStepper.vue'
-import PurchaseOrderRejectModal from './PurchaseOrderRejectModal.vue'
 import { orderPeriod, proposal, purchaseOrderDraft } from '@/mocks/orders'
 
 const router = useRouter()
@@ -16,7 +15,6 @@ const router = useRouter()
 // 수량은 사용자가 조정할 수 있어 복사본으로 들고 있습니다.
 const items = ref(purchaseOrderDraft.items.map((item) => ({ ...item })))
 const toastMessage = ref('')
-const isRejectOpen = ref(false)
 const dueDate = ref(purchaseOrderDraft.dueDate)
 
 // 납품 희망일은 오늘보다 이전으로 잡을 수 없습니다.
@@ -64,18 +62,8 @@ function approve() {
   })
 }
 
-// 반려 모달에 보여 줄 발주서 요약
-const rejectTarget = computed(() => ({
-  number: purchaseOrderDraft.number,
-  supplier: purchaseOrderDraft.info.find((field) => field.id === 'supplier')?.value ?? '',
-  quantity: `${totalQuantity.value.toLocaleString('ko-KR')}개`,
-  amount: formatCurrency(totalAmount.value),
-  requester: purchaseOrderDraft.info.find((field) => field.id === 'requester')?.value.split(' · ')[0] ?? '',
-}))
-
-function handleReject({ reason }) {
-  isRejectOpen.value = false
-  toastMessage.value = `발주서를 반려했습니다. (사유: ${reason})`
+function goToHistory() {
+  router.push('/purchase-orders')
 }
 </script>
 
@@ -190,18 +178,11 @@ function handleReject({ reason }) {
         <p class="purchase-order__note">{{ purchaseOrderDraft.note }}</p>
 
         <div class="purchase-order__actions">
-          <AppButton size="lg" variant="danger-outline" @click="isRejectOpen = true">반려</AppButton>
+          <AppButton size="lg" @click="goToHistory">이력 보러 가기</AppButton>
           <AppButton size="lg" variant="primary" @click="approve">승인하기</AppButton>
         </div>
       </AppCard>
     </div>
-
-    <PurchaseOrderRejectModal
-      v-if="isRejectOpen"
-      :order="rejectTarget"
-      @close="isRejectOpen = false"
-      @confirm="handleReject"
-    />
 
     <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </div>

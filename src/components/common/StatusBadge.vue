@@ -14,7 +14,6 @@ const TONE_BY_LABEL = {
   '승인 완료': 'warning',
   미매칭: 'danger',
   부족: 'danger',
-  반려: 'danger',
   '입고 완료': 'success',
   미사용: 'neutral',
 }

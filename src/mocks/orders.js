@@ -83,20 +83,11 @@ export const openPurchaseOrderOptions = [
   },
 ]
 
-// 발주서 반려 모달의 사유 선택지
-export const rejectReasons = [
-  { value: '수량 과다', label: '수량 과다' },
-  { value: '단가 재협의', label: '단가 재협의' },
-  { value: '납품일 조정', label: '납품일 조정' },
-  { value: '공급사 변경', label: '공급사 변경' },
-  { value: '기타', label: '기타' },
-]
-
 export const historyPeriod = '조회 기간  2026.08.01 – 2026.10.19'
 
 export const historyStats = [
-  { id: 'count', label: '누적 발주 건수', value: '24건', hint: '최근 3개월 기준' },
-  { id: 'amount', label: '누적 발주 금액', value: '₩58,940,000', hint: '이번 달 ₩10,566,000' },
+  { id: 'count', label: '누적 발주 건수', value: '23건', hint: '최근 3개월 기준' },
+  { id: 'amount', label: '누적 발주 금액', value: '₩57,800,000', hint: '이번 달 ₩10,566,000' },
   { id: 'in-progress', label: '진행 중 발주', value: '2건', hint: '승인 완료 · 배송 중 · 입고 전' },
   { id: 'lead-time', label: '평균 납품 리드타임', value: '4.6일', hint: '공급사 약정 5일 이내' },
 ]
@@ -148,17 +139,6 @@ export const purchaseOrders = [
     status: '입고 완료',
   },
   {
-    id: 'PO-2026-0924',
-    number: 'PO-2026-0924',
-    orderedAt: '2026.09.24',
-    supplier: '□□ 패키징',
-    specs: 'M-2 외 1개 규격',
-    quantity: '3,000개',
-    amount: '₩1,140,000',
-    deliveryAt: '—',
-    status: '반려',
-  },
-  {
     id: 'PO-2026-0915',
     number: 'PO-2026-0915',
     orderedAt: '2026.09.15',
@@ -197,11 +177,10 @@ export const historyTotalPages = 3
 
 // 필터 칩에 표시하는 건수는 현재 페이지가 아니라 전체 24건 기준입니다.
 export const historyStatusCounts = {
-  total: 24,
+  total: 23,
   '승인 완료': 1,
   '배송 중': 1,
   '입고 완료': 21,
-  반려: 1,
 }
 
 export const historySortOptions = [
