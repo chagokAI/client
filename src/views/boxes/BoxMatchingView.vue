@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
+import ApiState from '@/components/common/ApiState.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -11,80 +12,72 @@ import SelectField from '@/components/common/SelectField.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProductDeleteModal from './ProductDeleteModal.vue'
 import ProductEditModal from './ProductEditModal.vue'
-import {
-  matchFilterCounts,
-  matchSortOptions,
-  matchTotalPages,
-  productCategories,
-  productMatches,
-  productSearchFields,
-} from '@/mocks/boxes'
+import { auth, warehouseApi } from '@/stores/auth'
+import { MATCH, productRow } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
 
-const searchField = ref('name')
-const keyword = ref('')
-const category = ref('all')
-const statusFilter = ref('all')
-const sort = ref('fill-desc')
-const page = ref(1)
-const products = ref(productMatches.map((item) => ({ ...item })))
-
-const editingProduct = ref(null)
-const deletingProduct = ref(null)
-const toastMessage = ref('')
-
+const searchField = ref('name'), keyword = ref(''), category = ref('all'), statusFilter = ref('all'), sort = ref('fill-desc'), page = ref(1)
+const products = ref([]), totalPages = ref(0), counts = ref({}), categories = ref([])
+const editingProduct = ref(null), deletingProduct = ref(null), toastMessage = ref(''), saving = ref(false)
+const { loading, error, load } = useRemote()
+const productSearchFields = [{ value: 'name', label: '상품명' }, { value: 'code', label: '상품코드' }]
+const matchSortOptions = [{ value: 'fill-desc', label: '포장공간비율 높은 순' }, { value: 'fill-asc', label: '포장공간비율 낮은 순' }, { value: 'name', label: '상품명 순' }]
+const productCategories = computed(() => [{ value: 'all', label: '카테고리: 전체' }, ...categories.value])
+const statusOptions = computed(() => [{ value: 'all', label: '전체', count: counts.value.ALL ?? 0 }, ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 }))])
+const rows = computed(() => products.value)
 const columns = [
-  { key: 'name', label: '상품명 / 상품코드', width: '22%' },
-  { key: 'category', label: '카테고리', width: '10%' },
-  { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' },
-  { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
-  { key: 'fillRate', label: '포장공간비율', width: '14%' },
-  { key: 'status', label: '상태', width: '10%' },
-  { key: 'actions', label: '관리', width: '12%' },
+  { key: 'name', label: '상품명 / 상품코드', width: '22%' }, { key: 'category', label: '카테고리', width: '10%' },
+  { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' }, { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
+  { key: 'fillRate', label: '포장공간비율', width: '14%' }, { key: 'status', label: '상태', width: '10%' }, { key: 'actions', label: '관리', width: '12%' },
 ]
-
-const statusOptions = computed(() => [
-  { value: 'all', label: '전체', count: matchFilterCounts.total },
-  { value: '매칭 완료', label: '매칭 완료', count: matchFilterCounts.matched },
-  { value: '검토 필요', label: '검토 필요', count: matchFilterCounts.review },
-  { value: '미매칭', label: '미매칭', count: matchFilterCounts.unmatched },
-])
-
-const rows = computed(() => {
-  const trimmed = keyword.value.trim().toLowerCase()
-
-  return products.value.filter((item) => {
-    if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
-    if (category.value !== 'all' && item.category !== category.value) return false
-    if (!trimmed) return true
-    return String(item[searchField.value]).toLowerCase().includes(trimmed)
-  })
+function refresh() {
+  return load(signal => warehouseApi('/product-matches', { signal, query: { searchBy: searchField.value.toUpperCase(), keyword: keyword.value,
+    categoryId: category.value === 'all' ? undefined : category.value, status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+    page: page.value - 1, sort: ({ 'fill-desc': 'fillRatePct,desc', 'fill-asc': 'fillRatePct,asc', name: 'name,asc' })[sort.value] } }),
+  ({ data }) => { products.value = data.items.map(productRow); counts.value = data.counts ?? {}; totalPages.value = data.totalPages })
+}
+watch([searchField, keyword, category, statusFilter, sort], () => { if (page.value !== 1) page.value = 1; else refresh() })
+watch(page, refresh)
+onMounted(async () => {
+  refresh()
+  try { const { data } = await warehouseApi('/categories'); categories.value = data.map(c => ({ value: c.id, label: c.name })) }
+  catch (cause) { toastMessage.value = cause.message }
 })
-
-// 포장공간비율은 85% 이상이면 정상, 그 아래는 확인이 필요한 구간입니다.
-function fillTone(value) {
-  return value >= 85 ? 'info' : 'warning'
+function fillTone(value) { return value >= 85 ? 'info' : 'warning' }
+async function openEdit(row) {
+  try { const { data } = await warehouseApi(`/products/${row.id}`); editingProduct.value = productRow(data) }
+  catch (cause) { toastMessage.value = cause.message }
 }
-
-function handleSave() {
-  // TODO: 저장 API 응답으로 목록을 갱신합니다.
-  toastMessage.value = `${editingProduct.value.name} 상품 정보가 저장되었습니다.`
-  editingProduct.value = null
+async function handleSave(form) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    const dimensions = [form.width, form.depth, form.height].map(Number)
+    if (!form.name.trim() || dimensions.some(v => !Number.isInteger(v) || v <= 0)) throw new Error('상품명과 양수 정수 치수를 입력해 주세요.')
+    await warehouseApi(`/products/${editingProduct.value.id}`, { method: 'PATCH', body: {
+      expectedVersion: editingProduct.value.version, name: form.name.trim(), categoryId: form.category || undefined,
+      widthMm: dimensions[0], depthMm: dimensions[1], heightMm: dimensions[2], weightG: form.weight === '' ? undefined : Number(form.weight),
+      boxSpecId: form.matchedBoxId || undefined, matchOverrideReason: form.manualReason || undefined,
+    } })
+    editingProduct.value = null; toastMessage.value = '상품 정보가 저장되었습니다.'; await refresh()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
-
-function handleDeactivate() {
-  toastMessage.value = `${editingProduct.value.name} 상품을 비활성화했습니다.`
-  editingProduct.value = null
+async function deactivate(target) {
+  if (saving.value) return
+  saving.value = true
+  try { await warehouseApi(`/products/${target.id}`, { method: 'DELETE', query: { expectedVersion: target.version } });
+    editingProduct.value = null; deletingProduct.value = null; toastMessage.value = '상품이 비활성화되었습니다.'; await refresh()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
-
-function handleDelete() {
-  products.value = products.value.filter((item) => item.id !== deletingProduct.value.id)
-  toastMessage.value = `${deletingProduct.value.name} 상품이 삭제되었습니다.`
-  deletingProduct.value = null
-}
+function handleDeactivate() { return deactivate(editingProduct.value) }
+function handleDelete() { return deactivate(deletingProduct.value) }
 </script>
 
 <template>
   <div class="box-matching">
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
     <div class="box-matching__filters">
       <div class="box-matching__search">
         <SelectField
@@ -143,17 +136,19 @@ function handleDelete() {
 
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <AppButton size="sm" @click="editingProduct = row">수정</AppButton>
-          <AppButton size="sm" variant="danger-outline" @click="deletingProduct = row">삭제</AppButton>
+          <AppButton size="sm" :disabled="!auth.canEdit.value" @click="openEdit(row)">수정</AppButton>
+          <AppButton size="sm" variant="danger-outline" :disabled="!auth.canEdit.value" @click="deletingProduct = row">삭제</AppButton>
         </div>
       </template>
     </DataTable>
 
-    <Pagination v-model="page" class="box-matching__pagination" :total-pages="matchTotalPages" />
+    <Pagination v-model="page" class="box-matching__pagination" :total-pages="totalPages" />
 
     <ProductEditModal
       v-if="editingProduct"
       :product="editingProduct"
+      :categories="categories"
+      :busy="saving"
       @close="editingProduct = null"
       @save="handleSave"
       @deactivate="handleDeactivate"

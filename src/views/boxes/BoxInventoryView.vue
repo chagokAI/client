@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
@@ -10,103 +10,64 @@ import StatCard from '@/components/common/StatCard.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import SafetyStockModal from './SafetyStockModal.vue'
 import StockInModal from './StockInModal.vue'
-import { boxInventory, inventoryStats, inventoryUpdatedAt } from '@/mocks/boxes'
-
-const keyword = ref('')
-const statusFilter = ref('all')
-const specs = ref(boxInventory.map((item) => ({ ...item })))
-
-const editingSpec = ref(null)
-const stockInSpec = ref(null)
-const toastMessage = ref('')
-
+import ApiState from '@/components/common/ApiState.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import { auth, warehouseApi } from '@/stores/auth'
+import { STOCK, inventoryRow, quantity, number, time } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
+const keyword = ref(''), statusFilter = ref('all'), page = ref(1), totalPages = ref(0)
+const specs = ref([]), summary = ref(null), counts = ref({})
+const editingSpec = ref(null), stockInSpec = ref(null), toastMessage = ref(''), saving = ref(false)
+const { loading, error, load } = useRemote()
 const columns = [
-  { key: 'code', label: '박스 규격', width: '13%' },
-  { key: 'dimensions', label: '사이즈 (내경)', width: '17%' },
-  { key: 'current', label: '현재 재고', width: '11%' },
-  { key: 'safety', label: '안전 재고', width: '11%' },
-  { key: 'level', label: '재고 수준', width: '17%' },
-  { key: 'daysLeft', label: '예상 소진일', width: '11%' },
-  { key: 'status', label: '상태', width: '9%' },
-  { key: 'actions', label: '관리', width: '11%' },
+  { key: 'code', label: '박스 규격', width: '13%' }, { key: 'dimensions', label: '사이즈 (내경)', width: '17%' },
+  { key: 'current', label: '현재 재고', width: '11%' }, { key: 'safety', label: '안전 재고', width: '11%' },
+  { key: 'level', label: '재고 수준', width: '17%' }, { key: 'daysLeft', label: '예상 소진일', width: '11%' },
+  { key: 'status', label: '상태', width: '9%' }, { key: 'actions', label: '관리', width: '11%' },
 ]
-
-const statusOptions = computed(() => {
-  const countBy = (status) => specs.value.filter((item) => item.status === status).length
-  return [
-    { value: 'all', label: '전체', count: specs.value.length },
-    { value: '충분', label: '충분', count: countBy('충분') },
-    { value: '주의', label: '주의', count: countBy('주의') },
-    { value: '부족', label: '부족', count: countBy('부족') },
-  ]
-})
-
-const rows = computed(() => {
-  const trimmed = keyword.value.trim().toLowerCase()
-
-  return specs.value.filter((item) => {
-    if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
-    if (!trimmed) return true
-    return `${item.code} ${item.sizeName}`.toLowerCase().includes(trimmed)
-  })
-})
-
-const TONE_BY_STATUS = { 충분: 'info', 주의: 'warning', 부족: 'danger' }
-
-function toNumber(text) {
-  return Number(String(text).replace(/[^\d]/g, ''))
+const rows = computed(() => specs.value)
+const TONE_BY_STATUS = { 충분: 'info', 주의: 'warning', 부족: 'danger', 미확인: 'neutral' }
+const statusOptions = computed(() => [{ value: 'all', label: '전체', count: counts.value.ALL ?? 0 }, ...Object.entries(STOCK).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 }))])
+const inventoryUpdatedAt = computed(() => time(summary.value?.lastUpdatedAt))
+const inventoryStats = computed(() => [
+  { id: 'total', label: '총 보유 박스', value: quantity(summary.value?.totalOnHandQty), hint: `${number(summary.value?.activeSpecCount)}개 규격 운영 중` },
+  { id: 'shortage', label: '재고 부족 규격', value: `${number(summary.value?.shortageSpecCount)}개`, hint: '안전 재고 미만', tone: 'danger' },
+  { id: 'weekly', label: '이번 주 참고 수량', value: quantity(summary.value?.weeklyForecastUsageQty), hint: '저장된 참고 계산 기준' },
+  { id: 'lead', label: '평균 재고 소진일', value: summary.value?.avgDaysToStockout == null ? '—' : `${number(summary.value.avgDaysToStockout)}일`, hint: '등록된 소진일 기준' },
+])
+function refresh() {
+  return load(signal => warehouseApi('/box-inventories', { signal, query: { keyword: keyword.value, status: statusFilter.value === 'all' ? undefined : statusFilter.value, page: page.value - 1, size: 100 } }),
+    ({ data }) => { specs.value = data.items.map(inventoryRow); summary.value = data.summary; counts.value = data.counts; totalPages.value = data.totalPages })
 }
-
-// 현재 재고와 안전 재고 비율로 상태를 다시 매깁니다.
-function statusOf(current, safety) {
-  const ratio = safety ? current / safety : 1
-  if (ratio < 1) return '부족'
-  if (ratio < 1.3) return '주의'
-  return '충분'
+watch([keyword, statusFilter], () => { if (page.value !== 1) page.value = 1; else refresh() }); watch(page, refresh); onMounted(refresh)
+async function handleSafetyStockSave(form) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await warehouseApi(`/box-inventories/${editingSpec.value.id}/policy`, { method: 'PATCH', body: { expectedVersion: editingSpec.value.version,
+      safetyDays: form.useDays ? Number(form.safetyDays) : undefined, safetyQty: form.useDays ? undefined : Number(form.safetyQuantity), alertEnabled: form.alertEnabled } })
+    editingSpec.value = null; toastMessage.value = '안전 재고 기준이 저장되었습니다.'; await refresh()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
-
-function handleSafetyStockSave({ safetyDays, safetyQuantity, alertEnabled }) {
-  // TODO: 안전 재고 기준 저장 API 응답으로 목록을 갱신합니다.
-  const target = editingSpec.value
-  const current = toNumber(target.current)
-
-  specs.value = specs.value.map((item) =>
-    item.id === target.id
-      ? {
-          ...item,
-          safety: `${safetyQuantity.toLocaleString('ko-KR')}개`,
-          safetyDays,
-          alertEnabled,
-          level: Math.min(100, Math.round((current / safetyQuantity) * 100)),
-          status: statusOf(current, safetyQuantity),
-        }
-      : item,
-  )
-
-  toastMessage.value = `${target.code} 안전 재고 기준이 ${safetyDays}일분으로 저장되었습니다.`
-  editingSpec.value = null
-}
-
-function handleStockInSubmit({ specCode, nextStock }) {
-  // TODO: 입고 등록 API 응답으로 목록을 갱신합니다.
-  specs.value = specs.value.map((item) => {
-    if (item.code !== specCode) return item
-    const safety = toNumber(item.safety)
-    return {
-      ...item,
-      current: `${nextStock.toLocaleString('ko-KR')}개`,
-      level: Math.min(100, Math.round((nextStock / safety) * 100)),
-      status: statusOf(nextStock, safety),
-    }
-  })
-
-  toastMessage.value = `${specCode} 입고가 등록되어 재고가 ${nextStock.toLocaleString('ko-KR')}개가 되었습니다.`
-  stockInSpec.value = null
+async function handleStockInSubmit(form) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    const qty = Number(form.quantity)
+    if (!Number.isInteger(qty) || qty <= 0) throw new Error('입고 수량은 양수 정수로 입력해 주세요.')
+    const target = specs.value.find(item => item.id === form.specId)
+    await warehouseApi('/inventory-receipts', { method: 'POST', body: { requestId: form.requestId, boxSpecId: form.specId,
+      expectedVersion: target.version, purchaseOrderId: form.orderNumber || undefined, qty, receivedDate: form.receivedAt, memo: form.memo || undefined } })
+    stockInSpec.value = null; toastMessage.value = '입고가 등록되었습니다.'; await refresh()
+  } catch (cause) { toastMessage.value = cause.message }
+  finally { saving.value = false }
 }
 </script>
 
 <template>
   <div class="box-inventory">
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
     <div class="box-inventory__stats">
       <StatCard
         v-for="stat in inventoryStats"
@@ -137,10 +98,11 @@ function handleStockInSubmit({ specCode, nextStock }) {
       </template>
 
       <template #cell-level="{ row }">
-        <div class="level">
+        <div v-if="row.level != null" class="level">
           <ProgressBar :value="row.level" :tone="TONE_BY_STATUS[row.status]" :label="`${row.code} 재고 수준`" />
           <span class="level__value">{{ row.level }}%</span>
         </div>
+        <span v-else>—</span>
       </template>
 
       <template #cell-daysLeft="{ row }">
@@ -153,22 +115,24 @@ function handleStockInSubmit({ specCode, nextStock }) {
 
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <AppButton size="sm" @click="editingSpec = row">수정</AppButton>
-          <AppButton size="sm" @click="stockInSpec = row">입고</AppButton>
+          <AppButton size="sm" :disabled="!auth.canEdit.value" @click="editingSpec = row">수정</AppButton>
+          <AppButton size="sm" :disabled="!auth.canEdit.value || row.onHandQty == null" @click="stockInSpec = row">입고</AppButton>
         </div>
       </template>
     </DataTable>
 
+    <Pagination v-if="totalPages > 1" v-model="page" :total-pages="totalPages" />
+
     <SafetyStockModal
       v-if="editingSpec"
-      :spec="editingSpec"
+      :spec="editingSpec" :busy="saving"
       @close="editingSpec = null"
       @save="handleSafetyStockSave"
     />
 
     <StockInModal
       v-if="stockInSpec"
-      :spec="stockInSpec"
+      :spec="stockInSpec" :specs="specs" :busy="saving"
       @close="stockInSpec = null"
       @submit="handleStockInSubmit"
     />

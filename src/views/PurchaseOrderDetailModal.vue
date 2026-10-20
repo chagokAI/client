@@ -4,7 +4,7 @@ import BaseModal from '@/components/common/BaseModal.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import StepProgress from '@/components/common/StepProgress.vue'
-import { purchaseOrderSteps } from '@/mocks/orders'
+const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 완료', '배송 중', '입고 완료']
 
 defineProps({
   detail: {
@@ -35,7 +35,7 @@ function downloadPdf() {
       <StatusBadge :label="detail.status" />
     </template>
 
-    <StepProgress :steps="purchaseOrderSteps" :current-index="detail.currentStepIndex" />
+    <StepProgress v-if="detail.status !== '반려'" :steps="purchaseOrderSteps" :current-index="detail.currentStepIndex" />
 
     <dl class="detail-info">
       <div v-for="field in detail.info" :key="field.id" class="detail-info__field">
@@ -58,7 +58,7 @@ function downloadPdf() {
     </div>
 
     <template #footer>
-      <button class="detail-download" type="button" @click="downloadPdf">
+      <button class="detail-download" type="button" disabled title="PDF 다운로드는 준비 중이에요">
         <span aria-hidden="true">↓</span> PDF 다운로드
       </button>
       <AppButton @click="emit('close')">닫기</AppButton>

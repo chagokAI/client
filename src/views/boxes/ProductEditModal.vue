@@ -8,14 +8,11 @@ import OptionCard from '@/components/common/OptionCard.vue'
 import SelectField from '@/components/common/SelectField.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import {
-  defaultMatchCandidates,
-  matchCandidates,
-  productCategories,
-  productDetails,
-} from '@/mocks/boxes'
+
 
 const props = defineProps({
+  categories: { type: Array, default: () => [] },
+  busy: Boolean,
   product: {
     type: Object,
     required: true,
@@ -24,32 +21,27 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'deactivate'])
 
-const detail = productDetails[props.product.code] ?? {}
-const candidates = matchCandidates[props.product.code] ?? defaultMatchCandidates
-
-// '140 × 140 × 260 mm' 형태의 표기에서 세 변을 뽑아냅니다.
-const [width = '', depth = '', height = ''] = props.product.size.replace(/[^\d×]/g, '').split('×')
-
-const categoryOptions = productCategories.filter((option) => option.value !== 'all')
+const candidates = (props.product.matchCandidates ?? []).map(c => ({ id: c.boxSpec.id,
+  label: `${c.boxSpec.code} · ${c.boxSpec.name}`, dimensions: `${c.boxSpec.innerWidthMm} × ${c.boxSpec.innerDepthMm} × ${c.boxSpec.innerHeightMm} mm`,
+  fillRate: c.fillRatePct, source: c.recommended ? 'dimensions' : '', note: '' }))
+const categoryOptions = props.categories
 
 const form = reactive({
   name: props.product.name,
-  category: props.product.category,
-  weight: detail.weight ?? '',
-  width,
-  depth,
-  height,
-  matchedBoxId: detail.matchedBoxId ?? candidates.find((item) => item.source === 'ai')?.id ?? candidates[0]?.id,
-  manualReason: detail.manualReason ?? '',
+  category: props.product.categoryId ?? '',
+  weight: props.product.weightG ?? '',
+  width: props.product.widthMm ?? '',
+  depth: props.product.depthMm ?? '',
+  height: props.product.heightMm ?? '',
+  matchedBoxId: props.product.matchedBoxSpec?.id ?? '',
+  manualReason: props.product.matchOverrideReason ?? '',
 })
 
-const selectedCandidate = computed(() => candidates.find((item) => item.id === form.matchedBoxId))
-
-// AI 추천이 아닌 상자를 고르면 사유를 반드시 남기도록 합니다.
-const isManualPick = computed(() => selectedCandidate.value?.source !== 'ai')
+// 기존 매칭을 바꾸면 사유를 남깁니다.
+const isManualPick = computed(() => form.matchedBoxId && form.matchedBoxId !== props.product.matchedBoxSpec?.id)
 
 function badgeOf(candidate) {
-  if (candidate.source === 'ai') return { label: 'AI 추천', tone: 'gold' }
+  if (candidate.source === 'dimensions') return { label: '치수 추천', tone: 'gold' }
   if (candidate.id === form.matchedBoxId) return { label: '직접 지정', tone: 'info' }
   return { label: '', tone: 'neutral' }
 }
@@ -62,7 +54,8 @@ function rateTone(value) {
 }
 
 function handleSave() {
-  // TODO: 상품 수정 및 매칭 변경 API에 연결합니다.
+  if (props.busy) return
+  if (isManualPick.value && !form.manualReason.trim()) return
   emit('save', { ...form })
 }
 </script>
@@ -80,7 +73,7 @@ function handleSave() {
 
     <form class="product-edit" novalidate @submit.prevent="handleSave">
       <div class="product-edit__identity">
-        <button class="product-edit__image" type="button">
+        <button class="product-edit__image" type="button" disabled title="이미지 업로드 연결 준비 중">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
             <circle cx="8.5" cy="10" r="1.5" fill="currentColor" />
@@ -108,7 +101,7 @@ function handleSave() {
         </div>
       </div>
 
-      <FormField label="상품 사이즈 (mm)" required hint="AI가 이미지에서 측정한 값이에요. 실제와 다르면 고쳐주세요.">
+      <FormField label="상품 사이즈 (mm)" required hint="등록된 치수예요. 실제와 다르면 고쳐주세요.">
         <div class="product-edit__dimensions">
           <TextInput v-model="form.width" suffix="가로" format-number aria-label="가로 (mm)" />
           <span class="product-edit__times" aria-hidden="true">×</span>
@@ -145,18 +138,18 @@ function handleSave() {
         <TextInput
           :id="fieldId"
           v-model="form.manualReason"
-          placeholder="AI 추천 대신 이 상자를 고른 이유를 적어주세요"
+          placeholder="이 상자를 직접 지정하는 이유를 적어주세요"
           aria-label="직접 지정 사유"
         />
       </FormField>
 
-      <InlineNotice>저장하면 매칭 상태가 <strong>처리 중</strong>으로 바뀌고, 포장공간비율이 다시 계산돼요.</InlineNotice>
+      <InlineNotice>저장하면 치수에 맞춰 적합 여부와 포장공간비율을 다시 계산해요.</InlineNotice>
     </form>
 
     <template #footer>
       <button class="product-edit__deactivate" type="button" @click="emit('deactivate')">상품 비활성화</button>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" @click="handleSave">저장하기</AppButton>
+      <AppButton variant="primary" :disabled="busy || (isManualPick && !form.manualReason.trim())" @click="handleSave">저장하기</AppButton>
     </template>
   </BaseModal>
 </template>

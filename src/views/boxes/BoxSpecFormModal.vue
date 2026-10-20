@@ -1,17 +1,22 @@
 <script setup>
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SelectField from '@/components/common/SelectField.vue'
-import { materialOptions, supplierOptions } from '@/mocks/boxes'
+const materialOptions = ['골판지 B골', '골판지 A골', '골판지 AB골', '이중 골판지'].map(value => ({ value, label: value }))
+const sizeOptions = [{ value: 'S', label: '소형 (S)' }, { value: 'M', label: '중형 (M)' }, { value: 'L', label: '대형 (L)' }, { value: 'O', label: '기타' }]
 
 const props = defineProps({
+  suppliers: { type: Array, default: () => [] },
+  busy: Boolean,
   // 수정할 규격. null이면 새 규격 등록으로 동작합니다.
   spec: {
     type: Object,
     default: null,
   },
 })
+
+const editableSuppliers = computed(() => props.spec?.supplierId ? props.suppliers.filter(s => s.value) : props.suppliers)
 
 const emit = defineEmits(['close', 'save'])
 
@@ -24,14 +29,19 @@ const form = reactive({
   depth: props.spec?.depth ?? '',
   height: props.spec?.height ?? '',
   material: props.spec?.material ?? materialOptions[0].value,
-  supplier: props.spec?.supplier ?? supplierOptions[0].value,
+  supplier: props.spec?.supplierId ?? '',
+  sizeClass: props.spec?.sizeClass ?? 'S',
+  unitPriceKrw: props.spec?.unitPriceKrw ?? 0,
+  initialOnHandQty: 0,
+  safetyQty: 0,
+  targetQty: '',
   kind: props.spec?.custom ? 'custom' : 'standard',
   inUse: props.spec ? props.spec.status === '사용 중' : true,
   description: props.spec?.description ?? '',
 })
 
 function handleSave() {
-  // TODO: 규격 저장 API에 연결합니다.
+  if (props.busy) return
   emit('save', { ...form })
 }
 </script>
@@ -87,8 +97,8 @@ function handleSave() {
         </div>
 
         <div class="field">
-          <span class="field__label">공급사 <span class="field__required">*</span></span>
-          <SelectField v-model="form.supplier" :options="supplierOptions" width="100%" aria-label="공급사" />
+          <span class="field__label">공급사</span>
+          <SelectField v-model="form.supplier" :options="editableSuppliers" width="100%" aria-label="공급사" />
         </div>
       </div>
 
@@ -117,6 +127,16 @@ function handleSave() {
         </div>
       </div>
 
+      <div class="spec-form__row">
+        <div class="field"><label class="field__label" for="spec-price">단가 (원)</label><input id="spec-price" v-model.number="form.unitPriceKrw" class="field__input" type="number" min="0" step="1" required /></div>
+        <div class="field"><span class="field__label">크기 분류</span><SelectField v-model="form.sizeClass" :options="sizeOptions" width="100%" aria-label="크기 분류" /></div>
+      </div>
+      <div v-if="!isEditing" class="spec-form__row">
+        <div class="field"><label class="field__label" for="spec-stock">초기 재고 (개)</label><input id="spec-stock" v-model.number="form.initialOnHandQty" class="field__input" type="number" min="0" step="1" /></div>
+        <div class="field"><label class="field__label" for="spec-safety">안전 재고 (개)</label><input id="spec-safety" v-model.number="form.safetyQty" class="field__input" type="number" min="0" step="1" /></div>
+        <div class="field"><label class="field__label" for="spec-target">목표 재고 (개, 선택)</label><input id="spec-target" v-model.number="form.targetQty" class="field__input" type="number" min="0" step="1" /></div>
+      </div>
+
       <div class="field">
         <label class="field__label" for="spec-description">간단 설명</label>
         <textarea id="spec-description" v-model="form.description" class="field__textarea" rows="3" />
@@ -127,13 +147,13 @@ function handleSave() {
           <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2" />
           <path d="M8 4.8v3.6M8 10.9v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
         </svg>
-        저장하면 이 규격에 연결된 상품 {{ spec.linkedProducts }}개의 매칭 결과와 재고 기준이 다시 계산돼요.
+        저장하면 이 규격에 연결된 상품 {{ spec.linkedProducts }}개의 매칭 적합 여부와 비율이 다시 계산돼요.
       </p>
     </form>
 
     <template #footer>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" @click="handleSave">저장하기</AppButton>
+      <AppButton variant="primary" :disabled="busy" @click="handleSave">저장하기</AppButton>
     </template>
   </BaseModal>
 </template>

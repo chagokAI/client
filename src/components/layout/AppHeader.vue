@@ -3,8 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
 import NotificationPanel from './NotificationPanel.vue'
 import ProfileMenu from './ProfileMenu.vue'
-import { notifications as initialNotifications } from '@/mocks/notifications'
-import { centerOptions, currentUser } from '@/mocks/user'
+import { auth, warehouseApi } from '@/stores/auth'
+import { notificationRow } from '@/api/adapters'
+import AppToast from '@/components/common/AppToast.vue'
+const currentUser = computed(() => auth.session.value ?? {})
 
 const router = useRouter()
 
@@ -15,17 +17,24 @@ const navItems = [
   { to: '/purchase-orders', label: '발주서 이력' },
 ]
 
-const notifications = ref(initialNotifications.map((item) => ({ ...item })))
+const notifications = ref([])
+const unreadCount = ref(0)
+const toastMessage = ref('')
 const isPanelOpen = ref(false)
 const isProfileOpen = ref(false)
-const centerId = ref(centerOptions[0].value)
+const centerId = computed(() => auth.warehouseId.value ?? '')
 const bellArea = useTemplateRef('bellArea')
 const profileArea = useTemplateRef('profileArea')
 
-const unreadCount = computed(() => notifications.value.filter((item) => item.unread).length)
+async function loadNotifications() {
+  try {
+    const { data } = await warehouseApi('/notifications', { query: { size: 20 } })
+    notifications.value = data.items.map(notificationRow); unreadCount.value = data.unreadCount
+  } catch (error) { toastMessage.value = error.message }
+}
 
 function markAllAsRead() {
-  notifications.value = notifications.value.map((item) => ({ ...item, unread: false }))
+  toastMessage.value = '알림 읽음 처리는 아직 사용할 수 없어요.'
 }
 
 function handleViewAll() {
@@ -47,6 +56,7 @@ function handleKeydown(event) {
 
 // 벨과 프로필 메뉴는 동시에 열리지 않습니다.
 function toggleNotifications() {
+  if (!isPanelOpen.value) loadNotifications()
   isProfileOpen.value = false
   isPanelOpen.value = !isPanelOpen.value
 }
@@ -62,6 +72,7 @@ function handleProfileSelect() {
 }
 
 onMounted(() => {
+  loadNotifications()
   document.addEventListener('click', handleDocumentClick)
   document.addEventListener('keydown', handleKeydown)
 })
@@ -71,10 +82,10 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown)
 })
 
-function handleLogout() {
-  // TODO: 세션 정리 후 로그아웃 API에 연결합니다.
+async function handleLogout() {
+  try { await auth.logout(); await router.replace('/login') }
+  catch (error) { toastMessage.value = error.message }
   isProfileOpen.value = false
-  router.push('/login')
 }
 </script>
 
@@ -120,6 +131,7 @@ function handleLogout() {
           <div v-if="isPanelOpen" class="app-header__panel">
             <NotificationPanel
               :notifications="notifications"
+              :unread-count="unreadCount"
               @read-all="markAllAsRead"
               @view-all="handleViewAll"
             />
@@ -137,7 +149,7 @@ function handleLogout() {
 
           <div v-if="isProfileOpen" class="app-header__panel">
             <ProfileMenu
-              v-model:center-id="centerId"
+              :center-id="centerId"
               @select="handleProfileSelect"
               @logout="handleLogout"
             />
@@ -145,6 +157,7 @@ function handleLogout() {
         </div>
       </div>
     </div>
+    <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </header>
 </template>
 

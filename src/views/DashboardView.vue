@@ -1,10 +1,23 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
-import { costSummary, forecast, inventorySummary, safetyStockAlerts } from '@/mocks/dashboard'
+import { auth, warehouseApi } from '@/stores/auth'
+import { dashboardModel } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
+import ApiState from '@/components/common/ApiState.vue'
+
+const { loading, error, load } = useRemote()
+const result = ref(null)
+const model = computed(() => dashboardModel(result.value))
+const forecast = computed(() => model.value.forecast)
+const inventorySummary = computed(() => model.value.inventorySummary)
+const costSummary = computed(() => model.value.costSummary)
+const safetyStockAlerts = computed(() => model.value.safetyStockAlerts)
+function refresh() { return load(signal => warehouseApi('/dashboard', { signal }), value => { result.value = value.data }) }
+onMounted(refresh)
 
 const router = useRouter()
 
@@ -18,7 +31,9 @@ function goToOrder() {
 
 <template>
   <div class="dashboard">
-    <h1 class="dashboard__greeting">안녕하세요, OO 물류센터님</h1>
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <AppButton :disabled="loading" @click="refresh">새로고침</AppButton>
+    <h1 class="dashboard__greeting">안녕하세요, {{ auth.session.value?.warehouse?.name }}님</h1>
 
     <div class="dashboard__top">
       <AppCard class="dashboard__simulation" :padded="false">
@@ -26,7 +41,7 @@ function goToOrder() {
           <div class="simulation__heading">
             <div class="simulation__title-row">
               <h2 class="simulation__title">시뮬레이션</h2>
-              <span class="simulation__live"><span class="simulation__live-dot" />실시간</span>
+              <span class="simulation__live"><span class="simulation__live-dot" />준비 중</span>
             </div>
             <p class="simulation__description">창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.</p>
           </div>
@@ -69,7 +84,7 @@ function goToOrder() {
         </ul>
 
         <section class="insight">
-          <h3 class="insight__title">AI 인사이트</h3>
+          <h3 class="insight__title">분석 안내</h3>
           <ul class="insight__list">
             <li v-for="insight in forecast.insights" :key="insight">{{ insight }}</li>
           </ul>
@@ -103,7 +118,7 @@ function goToOrder() {
               :key="item.id"
               class="inventory__stack-segment"
               :class="`inventory__stack-segment--${item.tone}`"
-              :style="{ width: `${(item.ratio / inventoryTotal) * 100}%` }"
+              :style="{ width: `${inventoryTotal ? (item.ratio / inventoryTotal) * 100 : 0}%` }"
             />
           </div>
 

@@ -1,70 +1,44 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import FormField from '@/components/common/FormField.vue'
 import SelectField from '@/components/common/SelectField.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { boxInventory } from '@/mocks/boxes'
-import { openPurchaseOrderOptions } from '@/mocks/orders'
-
-const props = defineProps({
-  spec: {
-    type: Object,
-    required: true,
-  },
-})
-
+import DateField from '@/components/common/DateField.vue'
+import ApiState from '@/components/common/ApiState.vue'
+import { warehouseApi } from '@/stores/auth'
+import { localDate, quantity } from '@/api/adapters'
+import { useRemote } from '@/composables/useRemote'
+const props = defineProps({ spec: { type: Object, required: true }, specs: { type: Array, default: () => [] }, busy: Boolean })
 const emit = defineEmits(['close', 'submit'])
-
-const specOptions = boxInventory.map((item) => ({
-  value: item.id,
-  label: `${item.code} · ${item.sizeName}`,
-}))
-
-// 숫자 계산을 위해 '820개' 같은 표기에서 숫자만 뽑아 둡니다.
-function toNumber(text) {
-  return Number(String(text).replace(/[^\d]/g, ''))
-}
-
-const today = new Date().toISOString().slice(0, 10).replace(/-/g, '.')
-const linkedOrder = openPurchaseOrderOptions.find((order) => order.specIds.includes(props.spec.id))
-
-const form = reactive({
-  specId: props.spec.id,
-  orderNumber: linkedOrder?.value ?? '',
-  quantity: linkedOrder?.quantityBySpec[props.spec.id] ?? 0,
-  receivedAt: today,
-  memo: '',
-})
-
-const selectedSpec = computed(() => boxInventory.find((item) => item.id === form.specId) ?? props.spec)
-
-const currentStock = computed(() => toNumber(selectedSpec.value.current))
-
-const safetyStock = computed(() => toNumber(selectedSpec.value.safety))
-
-const nextStock = computed(() => currentStock.value + Number(form.quantity || 0))
-
-// 선택한 발주서에 이 규격이 몇 개 들어 있는지 보여 주는 안내입니다.
+const specOptions = computed(() => props.specs.map(item => ({ value: item.id, label: `${item.code} · ${item.sizeName}` })))
+const orders = ref([])
+const form = reactive({ specId: props.spec.id, orderNumber: '', quantity: 0, receivedAt: localDate(), memo: '' })
+const requestId = crypto.randomUUID()
+const { loading, error, load } = useRemote()
+function refreshOrders() { return load(signal => warehouseApi('/purchase-orders/open', { signal, query: { boxSpecId: form.specId } }), ({ data }) => { orders.value = data }) }
+watch(() => form.specId, () => { form.orderNumber = ''; refreshOrders() }, { immediate: true })
+const openPurchaseOrderOptions = computed(() => [{ value: '', label: '발주서 연결 안 함' }, ...orders.value.map(order => ({ value: order.id, label: order.poNo }))])
+const selectedSpec = computed(() => props.specs.find(item => item.id === form.specId) ?? props.spec)
+const currentStock = computed(() => selectedSpec.value.onHandQty)
+const safetyStock = computed(() => selectedSpec.value.safetyQty)
+const nextStock = computed(() => currentStock.value == null ? null : currentStock.value + Number(form.quantity || 0))
 const orderedQuantityHint = computed(() => {
-  const order = openPurchaseOrderOptions.find((item) => item.value === form.orderNumber)
-  const ordered = order?.quantityBySpec[form.specId]
-  return ordered ? `발주 수량 ${ordered.toLocaleString('ko-KR')}개` : ''
+  const order = orders.value.find(item => item.id === form.orderNumber)
+  const line = order?.items.find(item => item.boxSpec.id === form.specId)
+  return line ? `미입고 수량 ${quantity(line.remainingQty)}` : ''
 })
-
-function format(value) {
-  return `${value.toLocaleString('ko-KR')}개`
-}
-
+function format(value) { return quantity(value) }
 function handleSubmit() {
-  // TODO: 입고 등록 API에 연결합니다.
-  emit('submit', { ...form, specCode: selectedSpec.value.code, nextStock: nextStock.value })
+  if (props.busy || loading.value) return
+  emit('submit', { ...form, requestId })
 }
 </script>
 
 <template>
   <BaseModal title="입고 등록" description="받은 박스 수량을 재고에 반영합니다" width="620px" @close="emit('close')">
+    <ApiState :loading="loading" :error="error" @retry="refreshOrders" />
     <form class="stock-in" novalidate @submit.prevent="handleSubmit">
       <div class="stock-in__row">
         <FormField v-slot="{ fieldId }" label="박스 규격" required>
@@ -88,7 +62,7 @@ function handleSubmit() {
         </FormField>
 
         <FormField v-slot="{ fieldId }" label="입고일" required>
-          <TextInput :id="fieldId" v-model="form.receivedAt" placeholder="2026.10.20" aria-label="입고일" />
+          <DateField :id="fieldId" v-model="form.receivedAt" :max="localDate()" aria-label="입고일" />
         </FormField>
       </div>
 
@@ -124,7 +98,7 @@ function handleSubmit() {
 
     <template #footer>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" @click="handleSubmit">입고 등록</AppButton>
+      <AppButton variant="primary" :disabled="busy || loading || !!error" @click="handleSubmit">입고 등록</AppButton>
     </template>
   </BaseModal>
 </template>
