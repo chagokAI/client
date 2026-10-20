@@ -5,6 +5,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import DateField from '@/components/common/DateField.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import QuantityStepper from '@/components/common/QuantityStepper.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -17,6 +18,10 @@ const router = useRouter()
 const items = ref(purchaseOrderDraft.items.map((item) => ({ ...item })))
 const toastMessage = ref('')
 const isRejectOpen = ref(false)
+const dueDate = ref(purchaseOrderDraft.dueDate)
+
+// 납품 희망일은 오늘보다 이전으로 잡을 수 없습니다.
+const today = new Date().toISOString().slice(0, 10)
 
 const proposalColumns = [
   { key: 'code', label: '규격', width: '16%' },
@@ -50,8 +55,14 @@ function applyProposal() {
 }
 
 function approve() {
-  // TODO: 발주서 승인 API에 연결합니다.
-  router.push({ path: '/purchase-orders', query: { approved: purchaseOrderDraft.number.replace('발주번호 ', '') } })
+  // TODO: 발주서 승인 API에 연결합니다. 수정한 수량과 납품 희망일을 함께 보냅니다.
+  router.push({
+    path: '/purchase-orders',
+    query: {
+      approved: purchaseOrderDraft.number.replace('발주번호 ', ''),
+      deliveryAt: dueDate.value,
+    },
+  })
 }
 
 // 반려 모달에 보여 줄 발주서 요약
@@ -142,8 +153,16 @@ function handleReject({ reason }) {
 
         <dl class="order-info">
           <div v-for="field in purchaseOrderDraft.info" :key="field.id" class="order-info__field">
-            <dt>{{ field.label }}</dt>
-            <dd>{{ field.value }}</dd>
+            <dt :id="`order-info-${field.id}`">{{ field.label }}</dt>
+            <dd v-if="field.editable === 'date'" class="order-info__value--editable">
+              <DateField
+                v-model="dueDate"
+                :min="today"
+                show-weekday
+                :aria-label="field.label"
+              />
+            </dd>
+            <dd v-else>{{ field.value }}</dd>
           </div>
         </dl>
 
@@ -388,6 +407,11 @@ function handleReject({ reason }) {
   font-weight: 600;
   line-height: 1.45;
   word-break: keep-all;
+}
+
+/* 날짜 입력은 높이가 있어 읽기 전용 항목과 윗줄을 맞춥니다. */
+.order-info__value--editable {
+  margin-top: 2px;
 }
 
 .purchase-order__table {

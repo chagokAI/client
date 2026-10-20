@@ -103,9 +103,14 @@ function openDetail(row) {
   openedDetail.value = { ...detail, status: row.status }
 }
 
-function approve(number) {
+// 박스 주문 화면에서 납품 희망일을 바꿔 승인하면 목록의 납품(예정)일도 함께 바뀝니다.
+function approve(number, deliveryAt = '') {
+  const formatted = deliveryAt ? deliveryAt.replaceAll('-', '.') : ''
+
   orders.value = orders.value.map((item) =>
-    item.number === number ? { ...item, status: '승인 완료' } : item,
+    item.number === number
+      ? { ...item, status: '승인 완료', deliveryAt: formatted || item.deliveryAt }
+      : item,
   )
   openedDetail.value = null
   toastMessage.value = `${number} 발주서가 승인되어 공급사(OO 포장산업)에 전송되었습니다.`
@@ -115,7 +120,7 @@ function approve(number) {
 onMounted(() => {
   const approved = route.query.approved
   if (!approved) return
-  approve(String(approved))
+  approve(String(approved), route.query.deliveryAt ? String(route.query.deliveryAt) : '')
   router.replace({ path: '/purchase-orders' })
 })
 </script>
