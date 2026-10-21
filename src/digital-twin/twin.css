@@ -1,0 +1,149 @@
+/* 물류공간 디지털트윈 — 남색 바탕에 하늘색 빛, 미래형 관제 화면 느낌 */
+.twin {
+  --bg: #050b16;
+  --panel: rgba(10, 22, 42, 0.92);
+  --glass: rgba(12, 28, 54, 0.78);
+  --line: rgba(80, 170, 255, 0.22);
+  --glow: #4cc9ff;
+  --text: #dbe9ff;
+  --muted: #7f97b8;
+  --accent: #33c3ff;
+  --bad: #ff6b6b;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* 대시보드 시뮬레이션 카드 안에 들어간다. 전체 화면이면 화면을 가득 채운다 */
+  width: 100%;
+  height: 720px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 0%, #0d2140 0%, #050b16 70%);
+  color: var(--text);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  font-size: 13px;
+  box-shadow: 0 0 40px rgba(51, 195, 255, 0.08) inset;
+}
+.twin:fullscreen { height: 100vh; border-radius: 0; }
+.twin *, .twin *::before, .twin *::after { box-sizing: border-box; }
+
+.twin .bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 10px 16px; background: rgba(6, 16, 32, 0.9); border-bottom: 1px solid var(--line);
+}
+.twin .brand { font-size: 15px; color: var(--glow); letter-spacing: .02em; text-shadow: 0 0 12px rgba(76, 201, 255, .5); margin-right: 6px; }
+.twin .bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.twin .bar input, .twin .bar select {
+  font: inherit; padding: 4px 8px; color: var(--text); background: rgba(20, 40, 72, .8);
+  border: 1px solid var(--line); border-radius: 6px; color-scheme: dark;
+}
+.twin .bar input[type='number'] { width: 70px; }
+.twin .bar input[type='range'] { accent-color: var(--accent); }
+.twin .sep { width: 1px; height: 20px; background: var(--line); }
+.twin button {
+  font: inherit; padding: 5px 12px; color: var(--text); background: rgba(20, 40, 72, .8);
+  border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+}
+.twin button:hover:not(:disabled) { border-color: var(--glow); box-shadow: 0 0 10px rgba(76, 201, 255, .35); }
+.twin button.primary { background: linear-gradient(135deg, #1677ff, #33c3ff); border-color: transparent; color: #fff; }
+.twin button:disabled { opacity: .4; cursor: default; }
+.twin .status { margin-left: auto; color: var(--muted); }
+
+.twin .layout { min-height: 0; overflow: hidden; }
+.twin .stage { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+.twin #scene { position: absolute; inset: 0; }
+
+.twin .legend { position: absolute; left: 14px; top: 14px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 55%; font-size: 11px; }
+.twin .legend span {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; background: var(--glass);
+  border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(6px);
+}
+.twin .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; box-shadow: 0 0 6px currentColor; }
+.twin .hint-chip {
+  position: absolute; right: 14px; top: 14px; margin: 0; max-width: 360px; padding: 8px 12px; font-size: 12px; line-height: 1.5;
+  color: var(--muted); background: var(--glass); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px);
+}
+.twin .now {
+  position: absolute; left: 14px; bottom: 14px; padding: 10px 14px; max-width: 560px; font-size: 12px; line-height: 1.55;
+  background: var(--glass); border: 1px solid var(--line); border-left: 3px solid var(--glow); border-radius: 10px; backdrop-filter: blur(6px);
+}
+.twin .now:empty { display: none; }
+
+/* 상자·물품·호수·트럭 상세 팝업 */
+.twin .popup {
+  position: absolute; right: 16px; top: 16px; bottom: 16px; width: 400px; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid rgba(76, 201, 255, .45); border-radius: 14px;
+  box-shadow: 0 0 0 1px rgba(76, 201, 255, .08), 0 18px 50px rgba(0, 0, 0, .55), 0 0 30px rgba(51, 195, 255, .18);
+  backdrop-filter: blur(10px); animation: twin-pop .22s ease-out; z-index: 5;
+}
+.twin .popup[hidden] { display: none; }
+@keyframes twin-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.twin .popup__head { display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 8px 16px; border-bottom: 1px solid var(--line); }
+.twin .popup__close { margin-left: auto; padding: 2px 9px; }
+.twin .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.twin .crumbs button { padding: 2px 8px; font-size: 12px; }
+.twin .crumbs button.on { background: linear-gradient(135deg, #1677ff, #33c3ff); border-color: transparent; color: #fff; }
+.twin .detail { overflow: auto; padding: 8px 16px 16px; }
+.twin .hint { color: var(--muted); line-height: 1.6; }
+.twin .detail h2 { margin: 6px 0 10px; font-size: 16px; color: #fff; }
+.twin .detail h2 small { color: var(--muted); font-weight: 500; }
+.twin .detail h3 { margin: 16px 0 6px; font-size: 13px; color: var(--glow); }
+.twin .mini {
+  width: 100%; height: 210px; border: 1px solid var(--line); border-radius: 10px;
+  background: radial-gradient(circle at 50% 40%, #12305a, #071225);
+}
+.twin .kv { display: grid; grid-template-columns: 100px 1fr; gap: 5px 10px; margin: 10px 0; }
+.twin .kv dt { color: var(--muted); }
+.twin .kv dd { margin: 0; }
+.twin table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.twin th, .twin td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.twin th { color: var(--muted); font-weight: 600; }
+.twin td.num, .twin th.num { text-align: right; }
+.twin tr.pick td { background: rgba(51, 195, 255, .14); color: #fff; font-weight: 600; }
+.twin tr.no td { color: #5c7291; }
+.twin .link { color: var(--glow); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; background: none; border: 0; padding: 0; box-shadow: none; }
+.twin .tag { display: inline-block; padding: 1px 7px; border-radius: 4px; background: rgba(51, 195, 255, .15); color: var(--glow); font-size: 11px; }
+.twin .bar-fill { height: 6px; background: rgba(255, 255, 255, .08); border-radius: 3px; overflow: hidden; }
+.twin .bar-fill > i { display: block; height: 100%; }
+.twin .detail ul { padding-left: 18px; }
+
+.twin .foot {
+  display: grid; grid-template-columns: 1.2fr 1fr 1.4fr; gap: 14px; padding: 10px 16px; max-height: 170px;
+  background: rgba(6, 16, 32, 0.92); border-top: 1px solid var(--line); font-size: 12px;
+}
+.twin .foot__block { overflow: auto; }
+.twin .foot h3 { margin: 0 0 6px; font-size: 12px; color: var(--glow); letter-spacing: .03em; }
+.twin .foot__log ol { margin: 0; padding-left: 18px; }
+.twin .foot__log li { margin-bottom: 2px; color: var(--muted); }
+.twin .foot__log li:first-child { color: var(--text); }
+.twin .foot__log li.miss { color: var(--bad); }
+
+/* 제안서 효과 비교판: 기존 라인과 제안 라인의 트럭 수 */
+.twin .cmp {
+  position: absolute; right: 14px; top: 14px; width: min(380px, 46%); padding: 12px 14px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(6px);
+  box-shadow: 0 0 24px rgba(51, 195, 255, .12);
+}
+.twin .cmp:empty { display: none; }
+.twin .cmp h3 { margin: 0 0 8px; font-size: 13px; color: var(--glow); }
+.twin .cmp h3 small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.twin .cmp__row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.twin .cmp__name { flex: none; width: 34px; color: var(--muted); }
+.twin .cmp__row--new .cmp__name { color: #ffd166; }
+.twin .cmp__trucks { flex: 1; min-width: 0; font-size: 13px; line-height: 1.2; letter-spacing: -2px; word-break: break-all; }
+.twin .cmp__num { flex: none; font-size: 20px; color: var(--text); }
+.twin .cmp__num small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.twin .cmp__sub { margin: 2px 0 0 42px; font-size: 11px; color: var(--muted); }
+.twin .cmp__diff { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 15px; font-weight: 700; }
+.twin .cmp__diff.good { color: #5ef2a8; }
+.twin .cmp__diff small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.twin #trucks h4 { margin: 6px 0 2px; font-size: 11px; color: var(--muted); }
+.twin #log li.diff { color: #ffd166; }
+.twin .stage:has(.cmp:not(:empty)) .hint-chip { display: none; }
+
+/* 기본 시뮬레이션 / 비교 시뮬레이션 탭 */
+.twin .tabs { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: rgba(20, 40, 72, .5); }
+.twin .tabs button { padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.twin .tabs button.on { background: var(--accent); color: #04111f; font-weight: 700; }
+.twin #proposal { max-width: 260px; }
+.twin .cmp__basis { margin: -4px 0 4px; font-size: 11px; color: var(--muted); }
+.twin [hidden] { display: none !important; }   /* 라벨의 inline-flex 가 hidden 을 덮지 않게 */
