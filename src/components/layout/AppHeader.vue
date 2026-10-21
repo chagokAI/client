@@ -15,6 +15,7 @@ const navItems = [
   { to: '/boxes', label: '박스 관리' },
   { to: '/orders', label: '박스 주문' },
   { to: '/purchase-orders', label: '발주서 이력' },
+  { to: '/digital-twin', label: '디지털트윈' },
 ]
 
 const notifications = ref([])
