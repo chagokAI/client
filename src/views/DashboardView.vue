@@ -8,6 +8,9 @@ import { auth, warehouseApi } from '@/stores/auth'
 import { dashboardModel } from '@/api/adapters'
 import { useRemote } from '@/composables/useRemote'
 import ApiState from '@/components/common/ApiState.vue'
+import DigitalTwinViewer from '@/components/dashboard/DigitalTwinViewer.vue'
+
+const twin = ref(null)
 
 const { loading, error, load } = useRemote()
 const result = ref(null)
@@ -41,19 +44,18 @@ function goToOrder() {
           <div class="simulation__heading">
             <div class="simulation__title-row">
               <h2 class="simulation__title">시뮬레이션</h2>
-              <span class="simulation__live"><span class="simulation__live-dot" />준비 중</span>
+              <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
             </div>
             <p class="simulation__description">창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.</p>
           </div>
         </template>
 
         <template #actions>
-          <AppButton variant="secondary">전체 화면</AppButton>
+          <AppButton variant="secondary" @click="twin?.toggleFullscreen()">전체 화면</AppButton>
         </template>
 
         <div class="simulation__viewport">
-          <!-- TODO: 3D 시뮬레이션 뷰어를 이 영역에 마운트합니다. -->
-          <p class="simulation__placeholder">시뮬레이션 뷰어 연결 예정</p>
+          <DigitalTwinViewer ref="twin" />
         </div>
       </AppCard>
 
@@ -237,19 +239,7 @@ function goToOrder() {
 }
 
 .simulation__viewport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 880 / 480;
   margin: 16px 20px 20px;
-  border-radius: var(--radius-md);
-  background: #0e1118;
-}
-
-.simulation__placeholder {
-  margin: 0;
-  color: #5b6472;
-  font-size: 13px;
 }
 
 /* 예측량 */
