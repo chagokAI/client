@@ -22,9 +22,14 @@ defineExpose({ toggleFullscreen })
 <template>
   <div ref="root" class="twin">
       <header class="bar">
+        <div class="tabs" role="tablist">
+          <button data-tab="base" class="on" role="tab">시뮬레이션</button>
+          <button data-tab="compare" role="tab">비교 시뮬레이션</button>
+        </div>
+        <label id="proposalPick" hidden>제안서 <select id="proposal"></select></label>
         <label>시작 <input id="from" type="datetime-local" /></label>
         <label>끝 <input id="to" type="datetime-local" /></label>
-        <label>최대 <input id="limit" type="number" min="1" max="5000" step="100" value="300" /> 건</label>
+        <label>최대 <input id="limit" type="number" min="1" max="20000" step="100" value="300" /> 건</label>
         <button id="load" class="primary">구간 불러오기</button>
         <span class="sep"></span>
         <button id="play" disabled>▶ 재생</button>
@@ -46,6 +51,7 @@ defineExpose({ toggleFullscreen })
           <div id="legend" class="legend"></div>
           <p class="hint-chip">트럭 안의 상자를 누르면 미니 3D·충전율·빈 공간·왜 이 상자인지 볼 수 있어요. 아래 호수·트럭 이름을 눌러도 됩니다.</p>
           <div id="now" class="now"></div>
+          <div id="compare" class="cmp"></div>
 
           <aside id="popup" class="popup" hidden>
             <div class="popup__head">

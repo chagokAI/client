@@ -116,3 +116,34 @@
 .twin .foot__log li { margin-bottom: 2px; color: var(--muted); }
 .twin .foot__log li:first-child { color: var(--text); }
 .twin .foot__log li.miss { color: var(--bad); }
+
+/* 제안서 효과 비교판: 기존 라인과 제안 라인의 트럭 수 */
+.twin .cmp {
+  position: absolute; right: 14px; top: 14px; width: min(380px, 46%); padding: 12px 14px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(6px);
+  box-shadow: 0 0 24px rgba(51, 195, 255, .12);
+}
+.twin .cmp:empty { display: none; }
+.twin .cmp h3 { margin: 0 0 8px; font-size: 13px; color: var(--glow); }
+.twin .cmp h3 small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.twin .cmp__row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.twin .cmp__name { flex: none; width: 34px; color: var(--muted); }
+.twin .cmp__row--new .cmp__name { color: #ffd166; }
+.twin .cmp__trucks { flex: 1; min-width: 0; font-size: 13px; line-height: 1.2; letter-spacing: -2px; word-break: break-all; }
+.twin .cmp__num { flex: none; font-size: 20px; color: var(--text); }
+.twin .cmp__num small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.twin .cmp__sub { margin: 2px 0 0 42px; font-size: 11px; color: var(--muted); }
+.twin .cmp__diff { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 15px; font-weight: 700; }
+.twin .cmp__diff.good { color: #5ef2a8; }
+.twin .cmp__diff small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.twin #trucks h4 { margin: 6px 0 2px; font-size: 11px; color: var(--muted); }
+.twin #log li.diff { color: #ffd166; }
+.twin .stage:has(.cmp:not(:empty)) .hint-chip { display: none; }
+
+/* 기본 시뮬레이션 / 비교 시뮬레이션 탭 */
+.twin .tabs { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: rgba(20, 40, 72, .5); }
+.twin .tabs button { padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.twin .tabs button.on { background: var(--accent); color: #04111f; font-weight: 700; }
+.twin #proposal { max-width: 260px; }
+.twin .cmp__basis { margin: -4px 0 4px; font-size: 11px; color: var(--muted); }
+.twin [hidden] { display: none !important; }   /* 라벨의 inline-flex 가 hidden 을 덮지 않게 */
