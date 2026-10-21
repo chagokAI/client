@@ -63,6 +63,7 @@ export function orderDetail(o) {
 export function proposalModel(p) {
   if (!p) return null
   const analysis = p.analysis ?? {}
+  if (analysis.clientView) return agentProposalModel(p, analysis.clientView)
   const baseline = analysis.method === 'OBSERVATION_BASELINE'
   const ordered = p.items.filter((i) => i.proposedQty > 0)
   const month = Number(p.targetMonth.split('-')[1])
@@ -82,6 +83,21 @@ export function proposalModel(p) {
     totalAmount: currency(p.totalAmountKrw),
   }
 }
+// AI 에이전트 제안서: 에이전트가 저장한 화면용 요약(clientView)을 그대로 쓴다. 신규 규격 줄은 아직 규격이 없어
+// 품목(items)에 없으므로 표·합계는 clientView 기준이다.
+function agentProposalModel(p, view) {
+  return {
+    id: p.id, baseline: false, agent: true, totalQty: p.totalQty,
+    createdAt: `생성 ${time(p.generatedAt)}`,
+    headline: view.headline, subline: view.subline,
+    rows: view.rows.map((r) => ({ ...r, code: r.isNew ? `${r.code.replace(/^N-/, '')} (신규)` : r.code })),
+    rationale: view.rationale ?? [],
+    totalAmount: view.totalAmount,
+    effect: view.newSpecEffect?.rows?.length ? view.newSpecEffect : null,
+    sources: view.sources ?? [],
+  }
+}
+
 // 전월·전년 비교는 비용 예측에 근거가 저장된 경우에만 보여 준다.
 export function costComparisons(cost) {
   const signed = (value, text) => `${value < 0 ? '−' : '+'}${text}`
