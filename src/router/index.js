@@ -54,12 +54,6 @@ const routes = [
     component: () => import('@/views/PurchaseOrderHistoryView.vue'),
     meta: { title: '발주서 이력' },
   },
-  {
-    path: '/digital-twin',
-    name: 'digital-twin',
-    component: () => import('@/views/DigitalTwinView.vue'),
-    meta: { title: '디지털트윈' },
-  },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
 ]
 
