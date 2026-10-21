@@ -28,6 +28,9 @@ async function csrfToken() {
 
 export function clearCsrf() { csrf = null }
 
+// EventSource(SSE)는 fetch 를 거치지 않으므로 같은 기준 주소로 URL 만 만든다. 세션 쿠키는 같은 출처라 함께 간다.
+export function apiUrl(path) { return `${baseUrl}${path}` }
+
 export async function api(path, { method = 'GET', body, query, signal } = {}) {
   const params = new URLSearchParams()
   Object.entries(query ?? {}).forEach(([key, value]) => {
