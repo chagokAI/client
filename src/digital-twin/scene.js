@@ -10,7 +10,8 @@ const PACK_X = -0.6         // 포장대 앞(컨베이어가 끝나는 곳)
 const STATION_X = PACK_X + 0.55   // 포장대 가운데 (컨베이어와 겹치지 않게 뒤로)
 const DOOR_X = 1.4          // 트럭 적재함 문(뒤쪽) 위치
 const TRUCK_FLOOR = 0.9
-const PARK_Z = -4.2         // 출발한 트럭이 줄지어 서는 곳
+const PARK_Z = 4.2          // 출발한 트럭이 줄지어 서는 곳(라인에서 떨어진 거리)
+export const LANE_Z = 5.2   // 제안 라인(두 번째 컨베이어)의 위치
 
 export const CODE_COLORS = ['#e07a5f', '#3d85c6', '#81b29a', '#f2cc8f', '#9b5de5', '#f15bb5', '#00a6a6', '#8d6e63',
   '#5c6bc0', '#ef8354']
@@ -67,6 +68,8 @@ function boxGeo(sx, sy, sz) {
   return shellGeo.get(key)
 }
 
+const itemMat = new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 })   // 물품은 재질을 같이 쓴다
+
 export function makePackedBox(boxSize, itemDims, color) {
   // boxSize: [x(길이), y(폭), z(높이)] mm, 3D 축은 (x, z→y, y→z)
   const g = new THREE.Group()
@@ -77,8 +80,7 @@ export function makePackedBox(boxSize, itemDims, color) {
   const edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color }))
   g.add(shell, edges)
   const [ix, iy, iz] = itemInBoxSize(boxSize, itemDims)
-  const item = new THREE.Mesh(new THREE.BoxGeometry(ix * MM, iz * MM, iy * MM),
-    new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 }))
+  const item = new THREE.Mesh(boxGeo(ix, iy, iz).geo, itemMat)
   item.position.set((ix - sx) * MM / 2, (iz - sz) * MM / 2, (iy - sy) * MM / 2)   // 바닥 한쪽 구석
   g.add(item)
   g.userData = { shell, edges, item }
@@ -90,6 +92,10 @@ export function setBoxColor(group, color) {
   group.userData.edges.material.color.set(color)
 }
 
+/**
+ * 3D 공간 전체: 조명·바닥·창고 배경과 작업 라인 두 줄(기존 라인, 제안 라인).
+ * 라인마다 컨베이어·측정 게이트·포장대·로봇·진열대·트럭을 따로 가진다(Line).
+ */
 export class World {
   constructor(el, { onSelect }) {
     this.el = el
@@ -101,18 +107,21 @@ export class World {
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#050b16')
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.05, 200)
-    this.camera.position.set(-2.0, 6.0, 9.0)
+    this.camera.position.set(-3.0, 10.5, 15.5)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
-    this.controls.target.set(-0.8, 0.8, -0.6)
+    this.controls.target.set(-0.8, 0.8, 2.4)
     this.controls.enableDamping = true
     this.clock = new THREE.Clock()
-    this.flights = []          // 날아가는 물품·상자 애니메이션
-    this.packed = []           // 트럭에 실린 상자 { group, event }
-    this.trucks = []           // { no, group, boxes: [] }
+    this.flights = []          // 날아가는 물품·상자·트럭 애니메이션 { line, ... }
     this.selectables = []
     this.colorMode = 'code'
     this.codeColor = {}
     this._build()
+    this.lines = [
+      new Line(this, 0, { index: 0, name: '기존', title: '기존 라인 · 보유 박스', parkDir: -1 }),
+      new Line(this, LANE_Z, { index: 1, name: '제안', title: '제안 라인 · 보유 + 신규 규격', parkDir: 1 }),
+    ]
+    this.lines[1].group.visible = false      // 제안 라인은 비교 시뮬레이션에서만 보인다
     this._resize()
     this.resizer = new ResizeObserver(() => this._resize())   // 패널 크기가 바뀌어도 캔버스를 맞춘다
     this.resizer.observe(el)
@@ -139,31 +148,176 @@ export class World {
     const s = this.scene
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    s.fog = new THREE.Fog('#050b16', 16, 40)
+    s.fog = new THREE.Fog('#050b16', 22, 55)
     s.add(new THREE.HemisphereLight('#9ec9ff', '#0a1424', 1.1))
     const sun = new THREE.DirectionalLight('#d6ecff', 1.6)
-    sun.position.set(-5, 10, 7)
+    sun.position.set(-5, 12, 10)
+    sun.target.position.set(0, 0, 2.6)
+    s.add(sun.target)
     sun.castShadow = true
     sun.shadow.mapSize.set(1024, 1024)          // 그림자는 태양 하나, 작은 맵(렉 방지)
-    Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 8, bottom: -8, near: 1, far: 30 })
+    Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 11, bottom: -11, near: 1, far: 40 })
     s.add(sun)
-    const glowLight = new THREE.PointLight('#33c3ff', 6, 7, 2)   // 포장대 주변 하늘색 조명
-    glowLight.position.set(STATION_X, 2.2, -0.8)
-    s.add(glowLight)
 
-    // 바닥: 짙은 남색 + 빛나는 격자 + 통로 라인
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 28),
+    // 바닥: 짙은 남색 + 빛나는 격자
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 36),
       new THREE.MeshStandardMaterial({ color: '#0a1628', metalness: 0.35, roughness: 0.45 }))
     floor.rotation.x = -Math.PI / 2
+    floor.position.z = 2.6
     floor.receiveShadow = true
     s.add(floor)
     const minor = new THREE.GridHelper(44, 88, '#0f2a4a', '#0f2a4a')
-    minor.position.y = 0.002
+    minor.position.set(0, 0.002, 2.6)
     const major = new THREE.GridHelper(44, 22, '#1e6fb8', '#1e6fb8')
-    major.position.y = 0.003
+    major.position.set(0, 0.003, 2.6)
     major.material.transparent = true
     major.material.opacity = 0.55
     s.add(minor, major)
+    this._buildWarehouse()
+  }
+
+  /** 물류센터 배경: 뒤쪽 고층 선반 한 줄(팔레트)·천장 조명 띠. 어둡고 은은하게, 인스턴스로 그린다 */
+  _buildWarehouse() {
+    const s = this.scene
+    const m4 = new THREE.Matrix4()
+    const steel = new THREE.MeshStandardMaterial({ color: '#1d3557', metalness: 0.6, roughness: 0.45 })
+    const beamMat = new THREE.MeshStandardMaterial({ color: '#c77b2b', metalness: 0.4, roughness: 0.5, emissive: '#2a1200' })
+    const bays = []
+    for (let x = -12.5; x <= -3.5; x += 2.3) bays.push([x, -7.2])          // 고층 선반 한 줄
+    const levels = [0, 1.4, 2.8, 4.2]
+    const uprights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 5.0, 0.08), steel, bays.length * 4)
+    const beams = new THREE.InstancedMesh(new THREE.BoxGeometry(2.3, 0.1, 0.06), beamMat, bays.length * levels.length * 2)
+    const pallets = new THREE.InstancedMesh(new THREE.BoxGeometry(1.0, 0.12, 1.0), new THREE.MeshStandardMaterial({ color: '#4a3b2a', roughness: 0.9 }), bays.length * levels.length * 2)
+    const cartons = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#8a6a45', roughness: 0.85 }), bays.length * levels.length * 2)
+    let ui = 0, bi = 0, pi = 0
+    const rnd = (k) => (Math.sin(k * 12.9898) * 43758.5453) % 1
+    bays.forEach(([x, z], b) => {
+      for (const dx of [-1.15, 1.15]) for (const dz of [-0.5, 0.5]) uprights.setMatrixAt(ui++, m4.makeTranslation(x + dx, 2.5, z + dz))
+      levels.forEach((y, l) => {
+        for (const dz of [-0.5, 0.5]) beams.setMatrixAt(bi++, m4.makeTranslation(x, y + 0.35, z + dz))
+        for (const dx of [-0.55, 0.55]) {
+          pallets.setMatrixAt(pi, m4.makeTranslation(x + dx, y + 0.46, z))
+          const h = 0.55 + Math.abs(rnd(b * 31 + l * 7 + dx)) * 0.5
+          cartons.setMatrixAt(pi, new THREE.Matrix4().compose(new THREE.Vector3(x + dx, y + 0.52 + h / 2, z),
+            new THREE.Quaternion(), new THREE.Vector3(0.9, h, 0.9)))
+          pi++
+        }
+      })
+    })
+    s.add(uprights, beams, pallets, cartons)
+    // 천장 조명 띠(빛나는 막대만, 실제 광원 없음)
+    const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(6, 0.05, 0.18), new THREE.MeshBasicMaterial({ color: '#9fdcff' }), 12)
+    let si = 0
+    for (const x of [-9, -2, 5, 12]) for (const z of [-3.2, 2.6, 8.4]) strips.setMatrixAt(si++, m4.makeTranslation(x, 6.4, z))
+    s.add(strips)
+  }
+
+  _resize() {
+    const { clientWidth: w, clientHeight: h } = this.el
+    this.renderer.setSize(w, h)
+    this.camera.aspect = w / Math.max(h, 1)
+    this.camera.updateProjectionMatrix()
+  }
+
+  /** boxesPerLine: 라인마다 진열할 박스 목록(null 이면 그 라인은 멈춰 둔다), isNew: 신규 규격 코드 집합 */
+  reset(truckMm, boxesPerLine, isNew = new Set()) {
+    for (const f of this.flights) f.obj.parent?.remove(f.obj)
+    this.flights = []
+    this.selectables = []
+    this.truckMm = truckMm
+    const codes = [...new Map(boxesPerLine.flat().filter(Boolean).map((b) => [b.code, b])).keys()]
+    this.codeColor = Object.fromEntries(codes.map((c, i) => [c, CODE_COLORS[i % CODE_COLORS.length]]))
+    this.isNew = isNew
+    this.compare = !!boxesPerLine[1]          // 두 라인을 같이 돌리면 트럭 이름에 라인을 붙인다
+    this.lines.forEach((line, i) => line.reset(boxesPerLine[i] ?? null))
+  }
+
+  boxColor(ev) {
+    return this.colorMode === 'fill' ? fillColor(ev.box.fill) : this.codeColor[ev.box.code] ?? '#999'
+  }
+
+  setColorMode(mode) {
+    this.colorMode = mode
+    for (const line of this.lines) for (const p of line.packed) setBoxColor(p.group, this.boxColor(p.event))
+  }
+
+  /** 결과로 건너뛰기: bulk 동안은 진열대 라벨을 다시 그리지 않고, 끝나면 재고 숫자를 한 번에 맞춘다 */
+  beginBulk() { this.bulk = true }
+
+  endBulk() {
+    this.bulk = false
+    for (const line of this.lines) line.refreshRack()
+  }
+
+  /** 날아가는 물품·트럭을 모두 끝 위치로 보낸다(결과로 건너뛰기 전에) */
+  finishAll() {
+    for (const f of this.flights) {
+      if (f.done) continue
+      if (f.kind === 'move') { f.obj.position.copy(f.to); f.done = true } else f.line._advance(f, 1)
+    }
+    this.flights = this.flights.filter((f) => !f.done)
+  }
+
+  /** line 을 주면 그 라인만, 없으면 전체에서 움직이는 것이 있는지 */
+  busy(line) {
+    return this.flights.some((f) => !f.done && (!line || f.line === line))
+  }
+
+  _tick() {
+    const dt = Math.min(this.clock.getDelta(), 0.1)
+    for (const f of this.flights) {
+      if (f.done) continue
+      f.t += dt
+      const p = Math.min(1, f.t / f.dur)
+      if (f.kind === 'move') {
+        f.obj.position.lerpVectors(f.from, f.to, p * p * (3 - 2 * p))
+        if (p >= 1) f.done = true
+      } else {
+        f.line._advance(f, p)
+      }
+    }
+    this.flights = this.flights.filter((f) => !f.done)
+    for (const line of this.lines) line.tick(dt, this.flights.some((f) => f.kind === 'item' && f.line === line))
+    this.controls.update()
+    this.renderer.render(this.scene, this.camera)
+  }
+
+  _pick(e) {
+    const r = this.renderer.domElement.getBoundingClientRect()
+    const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+    const ray = new THREE.Raycaster()
+    ray.setFromCamera(v, this.camera)
+    const hit = ray.intersectObjects(this.selectables, false)
+    const box = hit.find((h) => h.object.userData.event)
+    if (box) return this.onSelect({ type: 'box', event: box.object.userData.event })
+    const truck = hit.find((h) => h.object.userData.truckNo)
+    if (truck) this.onSelect({ type: 'truck', no: truck.object.userData.truckNo, lane: truck.object.userData.lane })
+  }
+}
+
+/** 작업 라인 한 줄: 입고 → DL 측정 → 박스 선택·포장(로봇·진열대) → 트럭. 모든 좌표는 라인 그룹 안(z=0 이 벨트 가운데) */
+class Line {
+  constructor(world, z, { index, name, title, parkDir }) {
+    this.world = world
+    this.index = index
+    this.name = name
+    this.parkDir = parkDir          // 출발한 트럭이 서는 방향(-1 뒤쪽, 1 앞쪽)
+    this.group = new THREE.Group()
+    this.group.position.z = z
+    world.scene.add(this.group)
+    this.trucks = []
+    this.packed = []
+    this.binCount = 0
+    this.rack = null
+    this.gateReadout = null
+    this._build(title)
+  }
+
+  _build(title) {
+    const s = this.group
+    const glowLight = new THREE.PointLight('#33c3ff', 6, 7, 2)   // 포장대 주변 하늘색 조명
+    glowLight.position.set(STATION_X, 2.2, -0.8)
+    s.add(glowLight)
     const neon = new THREE.MeshBasicMaterial({ color: '#33c3ff' })
     for (const z of [-1.15, 1.15]) {
       const line = new THREE.Mesh(new THREE.PlaneGeometry(10.2, 0.04), neon)
@@ -223,9 +377,9 @@ export class World {
     legXs.forEach((x, i) => [-0.36, 0.36].forEach((z, k) => legs.setMatrixAt(i * 2 + k, m4.makeTranslation(x, (BELT_Y - 0.13) / 2, z))))
     legs.castShadow = true
     s.add(legs)
-    const inLabel = textSprite('입고')
-    inLabel.position.set(START_X, BELT_Y + 0.6, 0)
-    s.add(inLabel)
+    const titleLabel = textSprite(title, { size: 60 })
+    titleLabel.position.set(START_X + 0.6, BELT_Y + 1.15, 0)
+    s.add(titleLabel)
 
     // DL 측정 게이트: 프레임 + 빛 테두리 + 카메라 3대 + 스캔 빛
     const gate = new THREE.Group()
@@ -262,7 +416,6 @@ export class World {
     const gl = textSprite('DL 측정')
     gl.position.set(GATE_X, 2.35, 0)
     s.add(gl)
-    this.gateReadout = null
 
     // 포장대: 어두운 상판 + 빛 테두리 + 다리
     const station = new THREE.Group()
@@ -298,91 +451,10 @@ export class World {
     const bl = textSprite('맞는 박스 없음', { color: '#ffb3b3', border: 'rgba(255,90,90,0.7)' })
     bl.position.set(STATION_X, 1.0, 1.7)
     s.add(bl)
-    this.binCount = 0
-    this.rack = null
-    this._buildWarehouse()
-  }
 
-  /** 물류센터 배경: 뒤쪽 고층 선반 한 줄(팔레트)·예비 컨베이어 라인·천장 조명 띠·안전 기둥. 어둡고 은은하게, 인스턴스로 그린다 */
-  /** 쓰지 않는 예비 라인: 벨트·레일·다리와 측정 게이트 틀만 어둡게 둔다(움직이지 않음) */
-  _buildSpareLine(z) {
-    const s = this.scene
-    const dim = new THREE.MeshStandardMaterial({ color: '#1a2740', metalness: 0.5, roughness: 0.45 })
-    const beltMat = new THREE.MeshStandardMaterial({ color: '#0f1726', roughness: 0.8 })
-    const x0 = START_X - 0.2
-    const x1 = STATION_X - 0.62
-    const len = x1 - x0
-    const cx = (x0 + x1) / 2
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.7), beltMat)
-    belt.position.set(cx, BELT_Y - 0.02, z)
-    s.add(belt)
-    const offLed = new THREE.MeshBasicMaterial({ color: '#1d4a73' })
-    for (const dz of [-0.39, 0.39]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.09, 0.05), dim)
-      rail.position.set(cx, BELT_Y, z + dz)
-      const led = new THREE.Mesh(new THREE.BoxGeometry(len, 0.012, 0.052), offLed)
-      led.position.set(cx, BELT_Y + 0.03, z + dz)
-      s.add(rail, led)
-    }
-    const m4 = new THREE.Matrix4()
-    const xs = []
-    for (let x = x0 + 0.15; x <= x1 - 0.1; x += 1.2) xs.push(x)
-    const legs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, BELT_Y - 0.13, 0.06), dim, xs.length * 2)
-    xs.forEach((x, i) => [-0.36, 0.36].forEach((dz, k) => legs.setMatrixAt(i * 2 + k, m4.makeTranslation(x, (BELT_Y - 0.13) / 2, z + dz))))
-    s.add(legs)
-    for (const dz of [-0.6, 0.6]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.95, 0.12), dim)
-      post.position.set(GATE_X, 0.975, z + dz)
-      s.add(post)
-    }
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.32), dim)
-    top.position.set(GATE_X, 1.95, z)
-    s.add(top)
-    const label = textSprite('예비 라인 (대기)', { color: '#7f97b8', border: 'rgba(127,151,184,0.5)' })
-    label.position.set(cx, BELT_Y + 0.7, z)
-    s.add(label)
-  }
-
-  _buildWarehouse() {
-    const s = this.scene
-    const m4 = new THREE.Matrix4()
-    const steel = new THREE.MeshStandardMaterial({ color: '#1d3557', metalness: 0.6, roughness: 0.45 })
-    const beamMat = new THREE.MeshStandardMaterial({ color: '#c77b2b', metalness: 0.4, roughness: 0.5, emissive: '#2a1200' })
-    // 고층 선반: 왼쪽 뒤편 2줄, 4단
-    const bays = []
-    for (let x = -12.5; x <= -3.5; x += 2.3) bays.push([x, -7.2])          // 고층 선반 한 줄
-    const levels = [0, 1.4, 2.8, 4.2]
-    const uprights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 5.0, 0.08), steel, bays.length * 4)
-    const beams = new THREE.InstancedMesh(new THREE.BoxGeometry(2.3, 0.1, 0.06), beamMat, bays.length * levels.length * 2)
-    const pallets = new THREE.InstancedMesh(new THREE.BoxGeometry(1.0, 0.12, 1.0), new THREE.MeshStandardMaterial({ color: '#4a3b2a', roughness: 0.9 }), bays.length * levels.length * 2)
-    const cartons = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#8a6a45', roughness: 0.85 }), bays.length * levels.length * 2)
-    let ui = 0, bi = 0, pi = 0
-    const rnd = (k) => (Math.sin(k * 12.9898) * 43758.5453) % 1
-    bays.forEach(([x, z], b) => {
-      for (const dx of [-1.15, 1.15]) for (const dz of [-0.5, 0.5]) uprights.setMatrixAt(ui++, m4.makeTranslation(x + dx, 2.5, z + dz))
-      levels.forEach((y, l) => {
-        for (const dz of [-0.5, 0.5]) beams.setMatrixAt(bi++, m4.makeTranslation(x, y + 0.35, z + dz))
-        for (const dx of [-0.55, 0.55]) {
-          pallets.setMatrixAt(pi, m4.makeTranslation(x + dx, y + 0.46, z))
-          const h = 0.55 + Math.abs(rnd(b * 31 + l * 7 + dx)) * 0.5
-          cartons.setMatrixAt(pi, new THREE.Matrix4().compose(new THREE.Vector3(x + dx, y + 0.52 + h / 2, z),
-            new THREE.Quaternion(), new THREE.Vector3(0.9, h, 0.9)))
-          pi++
-        }
-      })
-    })
-    uprights.castShadow = false
-    s.add(uprights, beams, pallets, cartons)
-    // 예비 컨베이어 라인(비어 있음): 나중에 DL 처리 라인을 늘리면 쓴다
-    this._buildSpareLine(5.2)
-    // 천장 조명 띠(빛나는 막대만, 실제 광원 없음)
-    const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(6, 0.05, 0.18), new THREE.MeshBasicMaterial({ color: '#9fdcff' }), 8)
-    let si = 0
-    for (const x of [-9, -2, 5, 12]) for (const z of [-3.2, 3.2]) strips.setMatrixAt(si++, m4.makeTranslation(x, 6.4, z))
-    s.add(strips)
     // 하역장 안전 기둥(볼라드)
-    const bollards = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 12), new THREE.MeshStandardMaterial({ color: '#e7b93c', roughness: 0.5 }), 6)
-    ;[[0.9, -1.7], [0.9, 1.7], [0.9, -2.6], [0.9, 2.6], [7.4, -1.7], [7.4, 1.7]].forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.45, z)))
+    const bollards = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 12), new THREE.MeshStandardMaterial({ color: '#e7b93c', roughness: 0.5 }), 4)
+    ;[[0.9, -1.7], [0.9, 1.7], [7.4, -1.7], [7.4, 1.7]].forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.45, z)))
     s.add(bollards)
   }
 
@@ -475,12 +547,20 @@ export class World {
     r.fingers[1].position.x = grip
   }
 
-  /** 포장대 뒤 진열대: 지금 보유한 박스를 크기 순으로 세워 두고, 고를 때마다 그 박스가 반짝이며 재고가 줄어든다 */
+  _rackLabel(code, stock) {
+    const tag = this.world.isNew?.has(code) ? '★ 신규\n' : ''
+    return textSprite(`${tag}${code}\n재고 ${stock.toLocaleString('ko-KR')}`, { size: 44,
+      ...(tag ? { color: '#ffe29a', border: 'rgba(255,209,102,0.9)' } : {}) })
+  }
+
+  /** 포장대 뒤 진열대: 이 라인이 쓰는 박스를 크기 순으로 세워 두고, 고를 때마다 그 박스가 반짝이며 재고가 줄어든다 */
   _buildRack(boxes) {
     if (this.rack) {
-      this.scene.remove(this.rack.group)
+      this.group.remove(this.rack.group)
       this.rack.group.traverse((o) => { o.geometry?.dispose(); [].concat(o.material ?? []).forEach((m) => { m.map?.dispose(); m.dispose() }) })
+      this.rack = null
     }
+    if (!boxes) return
     const group = new THREE.Group()
     const sorted = [...boxes].sort((a, b) => a.dims[0] * a.dims[1] * a.dims[2] - b.dims[0] * b.dims[1] * b.dims[2])
     const gap = 0.18
@@ -502,9 +582,10 @@ export class World {
     let x = -total / 2
     sorted.forEach((b, i) => {
       const [w, d, h] = [...b.dims].sort((p, q) => q - p)    // 넓은 면이 앞으로
-      const color = this.codeColor[b.code]
+      const color = this.world.codeColor[b.code]
+      const fresh = this.world.isNew?.has(b.code)
       const geo = new THREE.BoxGeometry(w * MM, h * MM, d * MM)
-      const mat = new THREE.MeshStandardMaterial({ color: '#c8a26b', roughness: 0.85, emissive: color, emissiveIntensity: 0 })
+      const mat = new THREE.MeshStandardMaterial({ color: '#c8a26b', roughness: 0.85, emissive: color, emissiveIntensity: fresh ? 0.35 : 0 })
       const mesh = new THREE.Mesh(geo, mat)
       mesh.castShadow = true
       const cx = x + widths[i] / 2
@@ -512,59 +593,59 @@ export class World {
       const tape = new THREE.Mesh(new THREE.BoxGeometry(w * MM + 0.002, 0.012, 0.05), new THREE.MeshStandardMaterial({ color }))
       tape.position.set(cx, 0.12 + h * MM + 0.004, 0)
       group.add(mesh, tape)
-      const label = textSprite(`${b.code}\n재고 ${b.stock.toLocaleString('ko-KR')}`, { size: 44 })
-      label.position.set(cx, 0.12 + h * MM + 0.28, 0)
+      const label = this._rackLabel(b.code, b.stock)
+      label.position.set(cx, 0.12 + h * MM + 0.3, 0)
       group.add(label)
-      items[b.code] = { mesh, label, labelY: label.position.y, x: cx, glow: 0 }
+      items[b.code] = { mesh, label, labelY: label.position.y, x: cx, glow: 0, base: fresh ? 0.35 : 0 }
       x += widths[i] + gap
     })
     const title = textSprite('보유 박스 (크기 순)', { size: 52 })
     title.position.set(0, 1.55, -0.3)
     group.add(title)
     group.position.set(STATION_X - 0.4, 0, -2.0)
-    this.scene.add(group)
+    this.group.add(group)
     this.rack = { group, items }
   }
 
   /** 진열대에서 고른 박스를 반짝이고 재고 숫자를 바꾼다 */
   _pickFromRack(code, stockAfter, duration = 0.9) {
-    if (this.robot) { this.robot.t = 0; this.robot.dur = Math.max(0.35, Math.min(1.2, duration)) }
+    this.robot.t = 0
+    this.robot.dur = Math.max(0.35, Math.min(1.2, duration))
     const it = this.rack?.items[code]
     if (!it) return
     it.stock = stockAfter
-    if (this.bulk) return                         // 결과로 건너뛰는 중: 라벨은 끝에 한 번만
+    if (this.world.bulk) return                   // 결과로 건너뛰는 중: 라벨은 끝에 한 번만
     it.glow = 1
+    this._relabel(code, it)
+  }
+
+  _relabel(code, it) {
     this.rack.group.remove(it.label)
     it.label.material.map.dispose()
     it.label.material.dispose()
-    it.label = textSprite(`${code}\n재고 ${stockAfter.toLocaleString('ko-KR')}`, { size: 44 })
+    it.label = this._rackLabel(code, it.stock)
     it.label.position.set(it.x, it.labelY, 0)
     this.rack.group.add(it.label)
   }
 
-  _resize() {
-    const { clientWidth: w, clientHeight: h } = this.el
-    this.renderer.setSize(w, h)
-    this.camera.aspect = w / Math.max(h, 1)
-    this.camera.updateProjectionMatrix()
+  refreshRack() {
+    for (const [code, it] of Object.entries(this.rack?.items ?? {})) if (it.stock != null) this._relabel(code, it)
   }
 
-  reset(truckMm, boxes) {
-    for (const t of this.trucks) this.scene.remove(t.group)
-    for (const f of this.flights) this.scene.remove(f.obj)
+  reset(boxes) {
+    for (const t of this.trucks) this.group.remove(t.group)
+    if (this.gateReadout) { this.group.remove(this.gateReadout); this.gateReadout = null }
     this.trucks = []
     this.packed = []
-    this.flights = []
-    this.selectables = []
-    this.truckMm = truckMm
     this.binCount = 0
-    this.codeColor = Object.fromEntries(boxes.map((b, i) => [b.code, CODE_COLORS[i % CODE_COLORS.length]]))
+    this.active = !!boxes
     this._buildRack(boxes)
-    this._newTruck(1, true)
+    this.group.visible = !!boxes                   // 쓰지 않는 라인(기본 시뮬레이션의 제안 라인)은 숨긴다
+    if (boxes) this._newTruck(1, true)
   }
 
   _truckGroup(no) {
-    const [L, W, H] = this.truckMm.map((v) => v * MM)
+    const [L, W, H] = this.world.truckMm.map((v) => v * MM)
     const g = new THREE.Group()
     const cargo = new THREE.Mesh(new THREE.BoxGeometry(L, H, W),
       new THREE.MeshStandardMaterial({ color: '#3fa9ff', emissive: '#08264a', transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }))
@@ -584,21 +665,23 @@ export class World {
         g.add(wheel)
       }
     }
-    const label = textSprite(`트럭 ${no}`)
+    const label = textSprite(`${this.world.compare ? `${this.name} ` : ''}트럭 ${no}`,
+      this.index ? { color: '#ffe29a', border: 'rgba(255,209,102,0.8)' } : {})
     label.position.set(L / 2, TRUCK_FLOOR + H + 0.45, 0)
     g.add(label)
     cargo.userData.truckNo = no
-    this.selectables.push(cargo)
+    cargo.userData.lane = this.index
+    this.world.selectables.push(cargo)
     return g
   }
 
   _newTruck(no, instant = false) {
     const g = this._truckGroup(no)
     g.position.set(instant ? DOOR_X : DOOR_X + 12, 0, 0)
-    this.scene.add(g)
+    this.group.add(g)
     const t = { no, group: g, boxes: [], target: new THREE.Vector3(DOOR_X, 0, 0) }
     this.trucks.push(t)
-    if (!instant) this.flights.push({ obj: g, kind: 'move', from: g.position.clone(), to: t.target.clone(), t: 0, dur: 1.2 })
+    if (!instant) this.world.flights.push({ line: this, obj: g, kind: 'move', from: g.position.clone(), to: t.target.clone(), t: 0, dur: 1.2 })
     return t
   }
 
@@ -614,13 +697,13 @@ export class World {
       old.group.position.copy(to)
       return this._newTruck(no, true)
     }
-    this.flights.push({ obj: old.group, kind: 'move', from: old.group.position.clone(), to, t: 0, dur: duration })
+    this.world.flights.push({ line: this, obj: old.group, kind: 'move', from: old.group.position.clone(), to, t: 0, dur: duration })
     const t = this._newTruck(no)
-    this.flights[this.flights.length - 1].dur = duration
+    this.world.flights[this.world.flights.length - 1].dur = duration
     return t
   }
 
-  /** 출발한 트럭이 설 자리: 바닥 안 3×3 칸. 칸이 다 차면 그 칸에 있던 가장 오래된 트럭을 화면에서 내린다(기록은 남음) */
+  /** 출발한 트럭이 설 자리: 라인 바깥쪽 3×3 칸. 칸이 다 차면 그 칸에 있던 가장 오래된 트럭을 화면에서 내린다(기록은 남음) */
   _parkSlot(parkedIndex) {
     const COLS = 3
     const ROWS = 3
@@ -630,22 +713,13 @@ export class World {
     const older = this.trucks[parkedIndex - COLS * ROWS]
     if (older) {
       older.group.visible = false
-      this.selectables = this.selectables.filter((o) => {
+      this.world.selectables = this.world.selectables.filter((o) => {
         let p = o
         while (p) { if (p === older.group) return false; p = p.parent }
         return true
       })
     }
-    return new THREE.Vector3(DOOR_X + 0.6 + col * 5.0, 0, PARK_Z - row * 2.4)
-  }
-
-  boxColor(ev) {
-    return this.colorMode === 'fill' ? fillColor(ev.box.fill) : this.codeColor[ev.box.code] ?? '#999'
-  }
-
-  setColorMode(mode) {
-    this.colorMode = mode
-    for (const p of this.packed) setBoxColor(p.group, this.boxColor(p.event))
+    return new THREE.Vector3(DOOR_X + 0.6 + col * 5.0, 0, this.parkDir * (PARK_Z + row * 2.4))
   }
 
   /** 물품 한 건을 컨베이어 → 측정 → 포장 → 트럭으로 흘린다. duration: 전체 걸리는 시간(초), 0이면 바로 적재 */
@@ -655,9 +729,9 @@ export class World {
     item.castShadow = true
     const h = ev.item.dims[2] * MM
     item.position.set(START_X, BELT_Y + h / 2, 0)
-    this.scene.add(item)
-    const f = { obj: item, kind: 'item', ev, t: 0, dur: Math.max(duration, 0.0001), h, scanned: false, packed: false }
-    this.flights.push(f)
+    this.group.add(item)
+    const f = { line: this, obj: item, kind: 'item', ev, t: 0, dur: Math.max(duration, 0.0001), h, scanned: false, packed: false }
+    this.world.flights.push(f)
     if (duration === 0) this._advance(f, 1)
   }
 
@@ -686,15 +760,17 @@ export class World {
     } else {
       if (!f.packed) {
         f.packed = true
-        this.scene.remove(f.obj)
+        this.group.remove(f.obj)
+        f.obj.geometry.dispose()
+        f.obj.material.dispose()
         this._pickFromRack(ev.box.code, ev.box.stockAfter, f.dur * 0.25)
-        const g = makePackedBox(ev.box.size, ev.item.dims, this.boxColor(ev))
+        const g = makePackedBox(ev.box.size, ev.item.dims, this.world.boxColor(ev))
         g.position.set(STATION_X, BELT_Y + ev.box.size[2] * MM / 2, 0)
-        this.scene.add(g)
+        this.group.add(g)
         f.obj = g
         f.from = g.position.clone()
         f.truck = this.current()
-        const [L, W] = this.truckMm
+        const [L, W] = this.world.truckMm
         const [px, py, pz] = ev.box.pos
         const [sx, sy, sz] = ev.box.size
         // 트럭 좌표 x=0 이 운전석 쪽(안쪽). 문은 DOOR_X 쪽
@@ -716,85 +792,33 @@ export class World {
     f.truck.group.attach(f.obj)
     f.obj.position.copy(f.local)
     f.obj.userData.shell.userData.event = ev
-    this.selectables.push(f.obj.userData.shell)
+    this.world.selectables.push(f.obj.userData.shell)
     this.packed.push({ group: f.obj, event: ev })
     f.truck.boxes.push(ev)
   }
 
   _readout(text) {
-    if (this.gateReadout) this.scene.remove(this.gateReadout)
+    if (this.world.bulk) return
+    if (this.gateReadout) {
+      this.group.remove(this.gateReadout)
+      this.gateReadout.material.map.dispose()
+      this.gateReadout.material.dispose()
+    }
     this.gateReadout = textSprite(text, { size: 48 })
     this.gateReadout.position.set(GATE_X, 2.85, 0)
-    this.scene.add(this.gateReadout)
+    this.group.add(this.gateReadout)
   }
 
-  /** 결과로 건너뛰기: bulk 동안은 진열대 라벨을 다시 그리지 않고, 끝나면 재고 숫자를 한 번에 맞춘다 */
-  beginBulk() { this.bulk = true }
-
-  endBulk() {
-    this.bulk = false
-    for (const [code, it] of Object.entries(this.rack?.items ?? {})) {
-      if (it.stock == null) continue
-      this.rack.group.remove(it.label)
-      it.label.material.map.dispose()
-      it.label.material.dispose()
-      it.label = textSprite(`${code}\n재고 ${it.stock.toLocaleString('ko-KR')}`, { size: 44 })
-      it.label.position.set(it.x, it.labelY, 0)
-      this.rack.group.add(it.label)
-    }
-  }
-
-  /** 날아가는 물품·트럭을 모두 끝 위치로 보낸다(결과로 건너뛰기 전에) */
-  finishAll() {
-    for (const f of this.flights) {
-      if (f.done) continue
-      if (f.kind === 'move') { f.obj.position.copy(f.to); f.done = true } else this._advance(f, 1)
-    }
-    this.flights = this.flights.filter((f) => !f.done)
-  }
-
-  busy() {
-    return this.flights.some((f) => !f.done)
-  }
-
-  _tick() {
-    const dt = Math.min(this.clock.getDelta(), 0.1)
-    for (const f of this.flights) {
-      if (f.done) continue
-      f.t += dt
-      const p = Math.min(1, f.t / f.dur)
-      if (f.kind === 'move') {
-        f.obj.position.lerpVectors(f.from, f.to, p * p * (3 - 2 * p))
-        if (p >= 1) f.done = true
-      } else {
-        this._advance(f, p)
-      }
-    }
-    this.flights = this.flights.filter((f) => !f.done)
+  tick(dt, flowing) {
     this.scan.material.opacity = Math.max(0, this.scan.material.opacity - dt * 1.5)
-    if (this.flights.some((f) => f.kind === 'item')) this.beltTex.offset.x -= dt * 1.2
-    this._animateRobot(dt)   // 물품이 흐를 때만 벨트가 움직인다
-    if (this.rack) {
-      for (const it of Object.values(this.rack.items)) {
-        if (it.glow <= 0) continue
-        it.glow = Math.max(0, it.glow - dt * 1.4)
-        it.mesh.material.emissiveIntensity = it.glow * 0.9
-      }
+    if (flowing) this.beltTex.offset.x -= dt * 1.2   // 물품이 흐를 때만 벨트가 움직인다
+    this._animateRobot(dt)
+    if (!this.rack) return
+    for (const it of Object.values(this.rack.items)) {
+      if (it.glow <= 0) continue
+      it.glow = Math.max(0, it.glow - dt * 1.4)
+      it.mesh.material.emissiveIntensity = Math.max(it.base, it.glow * 0.9)
     }
-    this.controls.update()
-    this.renderer.render(this.scene, this.camera)
-  }
-
-  _pick(e) {
-    const r = this.renderer.domElement.getBoundingClientRect()
-    const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
-    const ray = new THREE.Raycaster()
-    ray.setFromCamera(v, this.camera)
-    const hit = ray.intersectObjects(this.selectables, false)
-    const box = hit.find((h) => h.object.userData.event)
-    if (box) return this.onSelect({ type: 'box', event: box.object.userData.event })
-    const truck = hit.find((h) => h.object.userData.truckNo)
-    if (truck) this.onSelect({ type: 'truck', no: truck.object.userData.truckNo })
   }
 }
 
