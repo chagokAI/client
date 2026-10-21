@@ -14,6 +14,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import { auth, warehouseApi } from '@/stores/auth'
 import { JOB, costComparisons, currency, draftModel, localDate, monthPeriod, nextMonth, proposalModel } from '@/api/adapters'
 import { useRemote } from '@/composables/useRemote'
+import { useAgentTask } from '@/composables/useAgentTask'
 
 const router = useRouter()
 
@@ -37,6 +38,27 @@ const busy = ref(false)
 const toastMessage = ref('')
 
 const proposal = computed(() => proposalModel(latest.value?.result))
+
+// AI 개선 실행: 에이전트가 규격·출고·재고를 분석해 제안서를 만들고, 저장 전에 담당자 승인을 기다린다.
+const agent = useAgentTask({
+  onDone: async () => {
+    drafts.value = []
+    activeId.value = ''
+    await refresh()
+    toastMessage.value = 'AI 개선 제안서를 불러왔습니다.'
+  },
+})
+const rejectComment = ref('')
+const agentNotice = computed(() => {
+  if (agent.phase.value === 'running') return `AI가 개선안을 만들고 있어요 · ${agent.step.value} (${agent.toolCount.value}단계)`
+  if (agent.phase.value === 'failed') return `AI 개선 실행 실패 · ${agent.error.value}`
+  return ''
+})
+
+async function decideAgent(decision) {
+  await agent.decide(decision, decision === 'REJECTED' ? rejectComment.value.trim() : '')
+  if (decision === 'REJECTED') rejectComment.value = ''
+}
 const activeDraft = computed(() => drafts.value.find((draft) => draft.id === activeId.value) ?? null)
 const draftOptions = computed(() =>
   drafts.value.map((draft) => ({ value: draft.id, label: `${draft.supplierName} · ${draft.statusLabel}` })),
@@ -50,6 +72,13 @@ const proposalColumns = [
   { key: 'expected', label: '대상 월 참고 소모', width: '25%', align: 'right' },
   { key: 'safety', label: '안전 재고', width: '19%', align: 'right' },
   { key: 'suggested', label: '제안 수량', width: '19%', align: 'right' },
+]
+
+const effectColumns = [
+  { key: 'metric', label: '항목', width: '34%' },
+  { key: 'before', label: '기존 박스', width: '24%', align: 'right' },
+  { key: 'after', label: '도입 후', width: '24%', align: 'right' },
+  { key: 'change', label: '변화', width: '18%', align: 'right' },
 ]
 
 const orderColumns = [
@@ -253,7 +282,57 @@ onBeforeUnmount(() => {
           <AppButton size="sm" :disabled="!auth.canEdit.value || busy || jobRunning" @click="runJob">
             {{ jobRunning ? '계산 중…' : proposal ? '다시 계산' : '계산 실행' }}
           </AppButton>
+          <AppButton
+            size="sm"
+            variant="primary"
+            :disabled="!auth.canEdit.value || agent.running.value"
+            @click="agent.start(targetMonth)"
+          >
+            {{ agent.running.value ? 'AI 실행 중…' : '개선 실행' }}
+          </AppButton>
         </template>
+
+        <p
+          v-if="agentNotice"
+          class="job-notice"
+          :class="{ 'job-notice--error': agent.phase.value === 'failed' }"
+          role="status"
+        >
+          {{ agentNotice }}
+        </p>
+
+        <section v-if="agent.approval.value" class="agent-approval" aria-label="AI 제안서 승인">
+          <h3 class="agent-approval__title">AI 개선 제안서 승인 요청</h3>
+          <p class="agent-approval__summary">
+            총 {{ agent.approval.value.qty?.toLocaleString() }}개 · {{ formatCurrency(agent.approval.value.totalAmount) }}
+            <template v-if="agent.approval.value.newSpecs?.length">
+              · 신규 규격 {{ agent.approval.value.newSpecs.join(', ') }}
+            </template>
+            · 자체 검토 {{ agent.approval.value.score }}점
+          </p>
+          <details class="agent-approval__body">
+            <summary>제안서 초안 보기</summary>
+            <pre>{{ agent.approval.value.proposalMarkdown }}</pre>
+          </details>
+          <ul v-if="agent.approval.value.sources?.length" class="agent-approval__sources">
+            <li v-for="item in agent.approval.value.sources" :key="item.sourceId">
+              <strong>{{ item.sourceId }}</strong> {{ item.title }}
+            </li>
+          </ul>
+          <textarea
+            v-model="rejectComment"
+            class="agent-approval__comment"
+            rows="2"
+            maxlength="500"
+            placeholder="반려 의견 (예: 안전 재고 넉넉하게, 신규 규격은 빼고)"
+          />
+          <div class="agent-approval__actions">
+            <AppButton size="sm" variant="danger-outline" :disabled="!rejectComment.trim()" @click="decideAgent('REJECTED')">
+              반려하고 다시 작성
+            </AppButton>
+            <AppButton size="sm" variant="primary" @click="decideAgent('APPROVED')">승인하고 저장</AppButton>
+          </div>
+        </section>
 
         <p v-if="jobNotice" class="job-notice" :class="{ 'job-notice--error': jobFailed }" role="status">
           {{ jobNotice }}
@@ -278,6 +357,22 @@ onBeforeUnmount(() => {
             <h3 class="rationale__title">제안 근거</h3>
             <ul class="rationale__list">
               <li v-for="reason in proposal.rationale" :key="reason">{{ reason }}</li>
+            </ul>
+          </section>
+
+          <section v-if="proposal.effect" class="rationale">
+            <h3 class="rationale__title">신규 규격 도입 효과</h3>
+            <DataTable
+              :columns="effectColumns"
+              :rows="proposal.effect.rows"
+              row-key="metric"
+            />
+          </section>
+
+          <section v-if="proposal.sources?.length" class="rationale">
+            <h3 class="rationale__title">근거</h3>
+            <ul class="rationale__list">
+              <li v-for="item in proposal.sources" :key="item.sourceId">{{ item.sourceId }} · {{ item.title }}</li>
             </ul>
           </section>
 
@@ -464,6 +559,59 @@ onBeforeUnmount(() => {
 .job-notice--error {
   background: var(--color-danger-bg);
   color: var(--color-danger-text);
+}
+
+/* AI 개선 제안서 승인 */
+.agent-approval {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-approval__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.agent-approval__summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+  word-break: keep-all;
+}
+
+.agent-approval__body pre {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 0;
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+
+.agent-approval__sources {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--color-text-secondary);
+}
+
+.agent-approval__comment {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  resize: vertical;
+}
+
+.agent-approval__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 /* 제안서·발주서가 아직 없을 때 */
