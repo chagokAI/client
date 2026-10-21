@@ -29,7 +29,8 @@ export function mountTwin(root) {
   const world = new World($('scene'), { onSelect: (sel) => openDetail(sel, 'reset') })
 
   // ---------------------------------------------------------------- 데이터
-  const MAX_EVENTS = 500 // /simulation-state 한 번에 받는 상한
+  const PAGE = 500 // /simulation-state 한 번에 받는 상한(서버 제한)
+  const MAX_EVENTS = 5000 // 화면에서 이어 받는 최대 건수
 
   function init() {
     // 기본 구간: DL 측정이 있는 기간(2026-05 ~ 09)의 마지막 달 첫날 근무 시간
@@ -53,17 +54,31 @@ export function mountTwin(root) {
     })).sort((a, b) => a.code.localeCompare(b.code, 'ko'))
   }
 
+  /** 기간의 이벤트를 500건씩 이어 받는다. 다음 페이지는 마지막 시각부터(같은 시각 중복은 eventId 로 거른다) */
+  async function fetchEvents(from, to, limit) {
+    const out = []
+    const seen = new Set()
+    let cursor = from
+    while (out.length < limit) {
+      const { data } = await warehouseApi('/simulation-state', { query: { from: cursor, to, limit: PAGE } })
+      const fresh = data.items.filter((o) => !seen.has(o.eventId))
+      fresh.forEach((o) => seen.add(o.eventId))
+      out.push(...fresh)
+      status(`불러오는 중… ${n(Math.min(out.length, limit))}건`)
+      if (data.items.length < PAGE || !fresh.length) break
+      cursor = data.items.at(-1).observedAt
+    }
+    return out.slice(0, limit)
+  }
+
   async function load() {
     pause()
     status('불러오는 중…')
     try {
       const limit = Math.min(Number($('limit').value) || 300, MAX_EVENTS)
       const kst = (v) => `${v}:00+09:00`
-      const [boxes, scene] = await Promise.all([
-        loadBoxes(),
-        warehouseApi('/simulation-state', { query: { from: kst($('from').value), to: kst($('to').value), limit } }),
-      ])
-      const result = simulate(scene.data.items, boxes)
+      const [boxes, items] = await Promise.all([loadBoxes(), fetchEvents(kst($('from').value), kst($('to').value), limit)])
+      const result = simulate(items, boxes)
       const sim = { ...result, boxes, truckMm: TRUCK_MM, returned: result.events.length }
       state.sim = sim
       state.next = 0
@@ -72,8 +87,8 @@ export function mountTwin(root) {
       legend()
       $('log').innerHTML = ''
       renderStats()
-      $('play').disabled = $('step').disabled = !sim.events.length
-      const full = scene.data.items.length >= limit ? ` (최대 ${limit}건까지, 구간을 줄이면 전부 볼 수 있어요)` : ''
+      $('play').disabled = $('step').disabled = $('skip').disabled = !sim.events.length
+      const full = items.length >= limit ? ` (최대 ${n(limit)}건까지)` : ''
       status(`${n(sim.returned)}건 불러옴${full} · 트럭 ${sim.trucks}대 예정`)
       openDetail({ type: 'home' }, 'reset')
     } catch (e) {
@@ -90,7 +105,7 @@ export function mountTwin(root) {
     return state.speed >= 20 ? 0 : Math.max(0.6, Math.min(5, 8 / state.speed))
   }
 
-  function pushOne() {
+  function pushOne(quiet = false) {
     const sim = state.sim
     if (!sim || state.next >= sim.events.length || swapping) return false
     const ev = sim.events[state.next]
@@ -109,10 +124,12 @@ export function mountTwin(root) {
     state.next += 1
     world.push(ev, stepDuration())
     state.done.push(ev)
-    showNow(ev)
-    log(ev.box ? `${kstTime(ev.at)} ${ev.item.name} → ${ev.box.code} (${ev.box.fill}%)`
-      : `${kstTime(ev.at)} ${ev.item.name} → 맞는 박스 없음`, ev.box ? '' : 'miss')
-    if (state.done.length % 5 === 0 || state.next === sim.events.length) renderStats()
+    if (!quiet) {
+      showNow(ev)
+      log(ev.box ? `${kstTime(ev.at)} ${ev.item.name} → ${ev.box.code} (${ev.box.fill}%)`
+        : `${kstTime(ev.at)} ${ev.item.name} → 맞는 박스 없음`, ev.box ? '' : 'miss')
+    }
+    if (!quiet && (state.done.length % 5 === 0 || state.next === sim.events.length)) renderStats()
     if (state.next === sim.events.length) {
       status(`끝 · ${n(sim.returned)}건 처리, 트럭 ${sim.trucks}대`)
       pause()
@@ -124,12 +141,41 @@ export function mountTwin(root) {
     if (!state.sim) return
     state.playing = true
     $('play').textContent = '❚❚ 일시정지'
+    // 초당 60건이 넘으면 한 번에 여러 건씩 흘린다(타이머는 16ms 아래로 내려가지 않는다)
     const tick = () => {
       if (!state.playing) return
-      pushOne()
-      timer = setTimeout(tick, 1000 / state.speed)
+      const batch = Math.max(1, Math.ceil(state.speed / 60))
+      for (let i = 0; i < batch && state.playing; i++) if (!pushOne(batch > 1 && i < batch - 1)) break
+      timer = setTimeout(tick, batch > 1 ? 16 : 1000 / state.speed)
     }
     tick()
+  }
+
+  /** 남은 물품을 애니메이션 없이 모두 처리해 결과(모든 트럭 적재·통계)를 바로 보여 준다 */
+  function skipToEnd() {
+    const sim = state.sim
+    if (!sim || state.next >= sim.events.length) return
+    pause()
+    world.finishAll()
+    swapping = false
+    world.beginBulk()
+    while (state.next < sim.events.length) {
+      const ev = sim.events[state.next]
+      const cur = world.current()
+      if (ev.box && ev.box.truck !== cur.no) {
+        log(`트럭 ${cur.no} 출발 (${cur.boxes.length}상자) → 트럭 ${ev.box.truck} 진입`, 'truck')
+        world.swapTruck(ev.box.truck, 0)
+      }
+      state.next += 1
+      world.push(ev, 0)
+      state.done.push(ev)
+    }
+    world.endBulk()
+    const last = sim.events.at(-1)
+    showNow(last)
+    log(`결과로 건너뜀 · ${n(sim.returned)}건 처리`, '')
+    renderStats()
+    status(`끝 · ${n(sim.returned)}건 처리, 트럭 ${sim.trucks}대 (결과로 건너뜀)`)
   }
 
   function pause() {
@@ -202,9 +248,10 @@ export function mountTwin(root) {
     renderCrumbs()
     const d = $('detail')
     if (mini) { mini.dispose(); mini = null }
+    // 처음(home)은 팝업을 닫고, 그 밖에는 팝업으로 띄운다
+    $('popup').hidden = sel.type === 'home'
     if (sel.type === 'home') {
-      d.innerHTML = '<p class="hint">트럭 안의 상자를 누르면 미니 3D, 충전율, 빈 공간, 왜 이 상자인지 볼 수 있어요.<br>' +
-        '아래 호수·트럭 이름을 눌러도 됩니다.</p>'
+      d.innerHTML = ''
     } else if (sel.type === 'box') {
       d.innerHTML = boxView(sel.event)
       mini = new MiniView(d.querySelector('.mini'))
@@ -323,6 +370,7 @@ export function mountTwin(root) {
   $('load').addEventListener('click', load)
   $('play').addEventListener('click', () => (state.playing ? pause() : play()))
   $('step').addEventListener('click', () => { pause(); pushOne() })
+  $('skip').addEventListener('click', skipToEnd)
   $('speed').addEventListener('input', (e) => {
     state.speed = Number(e.target.value)
     $('speedLabel').textContent = state.speed
@@ -351,6 +399,7 @@ export function mountTwin(root) {
     }
   }
   root.addEventListener('click', onClick)
+  $('popupClose').addEventListener('click', () => openDetail({ type: 'home' }, 'reset'))
 
   init()
 
