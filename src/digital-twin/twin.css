@@ -1,0 +1,75 @@
+.twin {
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100svh - var(--header-height, 64px) - 112px); min-height: 680px;
+  border: 1px solid #e6ddd0; border-radius: 12px; overflow: hidden; background: #f6f3ee;
+  font-size: 13px;
+  box-sizing: border-box;
+  --bg: #f6f3ee;
+  --panel: #ffffff;
+  --line: #e6ddd0;
+  --text: #202a38;
+  --muted: #8a93a3;
+  --brown: #603c22;
+  --gold: #dda632;
+  --ok: #2f7d4f;
+  --bad: #ba3b32;
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  color: var(--text);
+}
+.twin .bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.twin .brand { font-size: 15px; color: var(--brown); margin-right: 6px; }
+.twin .bar label { display: inline-flex; align-items: center; gap: 6px; }
+.twin .bar input, .twin .bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.twin .bar input[type='number'] { width: 70px; }
+.twin .sep { width: 1px; height: 20px; background: var(--line); }
+.twin button { font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+.twin button.primary { background: var(--brown); border-color: var(--brown); color: #fff; }
+.twin button:disabled { opacity: .45; cursor: default; }
+.twin .status { margin-left: auto; color: var(--muted); }
+.twin .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 0; overflow: hidden; }
+.twin .stage { position: relative; min-height: 0; overflow: hidden; }
+.twin #scene { position: absolute; inset: 0; }
+.twin .legend {
+  position: absolute; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 60%;
+  font-size: 11px;
+}
+.twin .legend span { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; background: rgba(255,255,255,.88); border-radius: 999px; }
+.twin .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.twin .now {
+  position: absolute; left: 12px; bottom: 12px; padding: 8px 12px; background: rgba(255,255,255,.92);
+  border-radius: 8px; font-size: 12px; line-height: 1.5; max-width: 520px;
+}
+.twin .now:empty { display: none; }
+.twin .side { background: var(--panel); border-left: 1px solid var(--line); overflow: auto; padding: 12px 16px; font-size: 13px; }
+.twin .crumbs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; font-size: 12px; }
+.twin .crumbs button { padding: 2px 8px; font-size: 12px; }
+.twin .crumbs button.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+.twin .hint { color: var(--muted); line-height: 1.6; }
+.twin .detail h2 { margin: 4px 0 8px; font-size: 16px; }
+.twin .detail h3 { margin: 16px 0 6px; font-size: 13px; }
+.twin .mini { width: 100%; height: 200px; border: 1px solid var(--line); border-radius: 8px; background: #fbfaf7; }
+.twin .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 8px; margin: 8px 0; }
+.twin .kv dt { color: var(--muted); }
+.twin .kv dd { margin: 0; }
+.twin table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.twin th, .twin td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.twin td.num, .twin th.num { text-align: right; }
+.twin tr.pick td { background: #fff6e0; font-weight: 600; }
+.twin tr.no td { color: var(--muted); }
+.twin .link { color: var(--brown); text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
+.twin .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: #eef2f7; font-size: 11px; }
+.twin .bar-fill { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
+.twin .bar-fill > i { display: block; height: 100%; }
+.twin .foot {
+  display: grid; grid-template-columns: 1.2fr 1fr 1.4fr; gap: 12px; padding: 10px 16px;
+  background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; max-height: 190px;
+}
+.twin .foot__block { overflow: auto; }
+.twin .foot h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.twin .foot__log ol { margin: 0; padding-left: 18px; }
+.twin .foot__log li { margin-bottom: 2px; }
+.twin .foot__log li.miss { color: var(--bad); }
+.twin *, .twin *::before, .twin *::after { box-sizing: border-box; }
