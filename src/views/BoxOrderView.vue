@@ -74,6 +74,13 @@ const proposalColumns = [
   { key: 'suggested', label: '제안 수량', width: '19%', align: 'right' },
 ]
 
+const effectColumns = [
+  { key: 'metric', label: '항목', width: '34%' },
+  { key: 'before', label: '기존 박스', width: '24%', align: 'right' },
+  { key: 'after', label: '도입 후', width: '24%', align: 'right' },
+  { key: 'change', label: '변화', width: '18%', align: 'right' },
+]
+
 const orderColumns = [
   { key: 'code', label: '규격', width: '12%' },
   { key: 'size', label: '사이즈 (mm)', width: '26%' },
@@ -350,6 +357,22 @@ onBeforeUnmount(() => {
             <h3 class="rationale__title">제안 근거</h3>
             <ul class="rationale__list">
               <li v-for="reason in proposal.rationale" :key="reason">{{ reason }}</li>
+            </ul>
+          </section>
+
+          <section v-if="proposal.effect" class="rationale">
+            <h3 class="rationale__title">신규 규격 도입 효과</h3>
+            <DataTable
+              :columns="effectColumns"
+              :rows="proposal.effect.rows"
+              row-key="metric"
+            />
+          </section>
+
+          <section v-if="proposal.sources?.length" class="rationale">
+            <h3 class="rationale__title">근거</h3>
+            <ul class="rationale__list">
+              <li v-for="item in proposal.sources" :key="item.sourceId">{{ item.sourceId }} · {{ item.title }}</li>
             </ul>
           </section>
 
