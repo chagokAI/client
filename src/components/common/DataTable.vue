@@ -77,6 +77,28 @@ defineProps({
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-lg);
   background: var(--color-white);
+  /* 가로 스크롤바도 표 테두리·머리글과 같은 베이지 계열로 맞춥니다. */
+  scrollbar-color: var(--color-border) var(--color-cream);
+  scrollbar-width: thin;
+}
+
+.data-table::-webkit-scrollbar {
+  height: 10px;
+}
+
+.data-table::-webkit-scrollbar-track {
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-cream);
+}
+
+.data-table::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-cream);
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.data-table::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
 }
 
 .data-table--flush {
