@@ -54,6 +54,10 @@
   --layout-max-width: 1344px;
   --layout-gutter: 48px;
   --header-height: 60px;
+
+  /* 좌측 메뉴 드로어: 펼침 / 아이콘만 남는 접힘 */
+  --sidebar-width: 232px;
+  --sidebar-width-collapsed: 64px;
 }
 
 *,
