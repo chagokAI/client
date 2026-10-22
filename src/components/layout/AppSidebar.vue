@@ -26,7 +26,7 @@ const navItems = [
       { to: '/purchase-orders', label: '발주서 이력 관리' },
     ],
   },
-  { to: '/boxes/matching', label: '물품-박스 매칭 현황', icon: 'M10 3 3.5 6.2v7.6L10 17l6.5-3.2V6.2Zm0 0v14M3.5 6.2 10 9.4l6.5-3.2' },
+  { to: '/boxes/matching', label: '물품-박스 매칭 현황', icon: 'M4 5.5h.01M4 10h.01M4 14.5h.01M7.5 5.5H17M7.5 10H17M7.5 14.5H17' },
 ]
 
 // 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
