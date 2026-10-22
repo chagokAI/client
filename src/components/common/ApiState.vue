@@ -11,7 +11,23 @@ defineEmits(['retry'])
 </template>
 
 <style scoped>
-.api-state { padding: 12px 16px; margin: 0 0 16px; border-radius: 8px; background: #f7f3ec; font-size: 13px; }
-.api-state--error { background: #fff0ee; color: #a12f20; }
-.api-state button { margin-left: 12px; background: transparent; border: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+.api-state {
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  border-radius: 8px;
+  background: #f7f3ec;
+  font-size: 13px;
+}
+.api-state--error {
+  background: #fff0ee;
+  color: #a12f20;
+}
+.api-state button {
+  margin-left: 12px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 </style>

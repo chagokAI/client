@@ -18,6 +18,11 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  // 열이 많아 좁은 화면에서 가로 스크롤이 필요한 표에 지정합니다. (예: '1440px')
+  minWidth: {
+    type: String,
+    default: '720px',
+  },
   emptyText: {
     type: String,
     default: '표시할 데이터가 없습니다.',
@@ -27,19 +32,14 @@ defineProps({
 
 <template>
   <div class="data-table" :class="{ 'data-table--flush': flush }">
-    <table class="data-table__table">
+    <table class="data-table__table" :style="{ minWidth }">
       <colgroup>
         <col v-for="column in columns" :key="column.key" :style="column.width ? { width: column.width } : undefined" />
       </colgroup>
 
       <thead>
         <tr>
-          <th
-            v-for="column in columns"
-            :key="column.key"
-            scope="col"
-            :style="{ textAlign: column.align || 'left' }"
-          >
+          <th v-for="column in columns" :key="column.key" scope="col" :style="{ textAlign: column.align || 'left' }">
             {{ column.label }}
           </th>
         </tr>
@@ -56,11 +56,7 @@ defineProps({
           :key="row[rowKey] ?? rowIndex"
           :class="{ 'data-table__row--highlight': row.highlight }"
         >
-          <td
-            v-for="column in columns"
-            :key="column.key"
-            :style="{ textAlign: column.align || 'left' }"
-          >
+          <td v-for="column in columns" :key="column.key" :style="{ textAlign: column.align || 'left' }">
             <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :index="rowIndex">
               {{ row[column.key] }}
             </slot>
@@ -77,6 +73,28 @@ defineProps({
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-lg);
   background: var(--color-white);
+  /* 가로 스크롤바도 표 테두리·머리글과 같은 베이지 계열로 맞춥니다. */
+  scrollbar-color: var(--color-border) var(--color-cream);
+  scrollbar-width: thin;
+}
+
+.data-table::-webkit-scrollbar {
+  height: 10px;
+}
+
+.data-table::-webkit-scrollbar-track {
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-cream);
+}
+
+.data-table::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-cream);
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.data-table::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
 }
 
 .data-table--flush {
@@ -86,7 +104,6 @@ defineProps({
 
 .data-table__table {
   width: 100%;
-  min-width: 720px;
   border-collapse: collapse;
   font-size: 13px;
 }

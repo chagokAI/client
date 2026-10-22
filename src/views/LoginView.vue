@@ -12,14 +12,22 @@ const busy = ref(false)
 
 async function handleLogin(input) {
   if (busy.value) return
-  busy.value = true; message.value = ''
+  busy.value = true
+  message.value = ''
   try {
     await auth.login(input)
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//')
-      ? route.query.redirect : '/dashboard'
+    const redirect =
+      typeof route.query.redirect === 'string' &&
+      route.query.redirect.startsWith('/') &&
+      !route.query.redirect.startsWith('//')
+        ? route.query.redirect
+        : '/dashboard'
     await router.replace(redirect)
-  } catch (error) { message.value = error.message }
-  finally { busy.value = false }
+  } catch (error) {
+    message.value = error.message
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 
@@ -31,9 +39,7 @@ async function handleLogin(input) {
       <LoginForm :message="message" :busy="busy" @submit="handleLogin" @change="message = ''" />
     </main>
 
-    <footer class="login-page__mobile-footer">
-      © {{ new Date().getFullYear() }} CHAGOK. All rights reserved.
-    </footer>
+    <footer class="login-page__mobile-footer">© {{ new Date().getFullYear() }} CHAGOK. All rights reserved.</footer>
   </div>
 </template>
 

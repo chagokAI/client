@@ -158,7 +158,9 @@ async function handleSubmit() {
   background: var(--color-white);
   color: var(--color-text);
   font-size: 14px;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .form-field input::placeholder {

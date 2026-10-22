@@ -3,18 +3,28 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 // 단위: 3D 1 = 1m. 데이터는 mm.
 const MM = 0.001
-const BELT_Y = 0.8          // 컨베이어 윗면 높이
-const START_X = -7.5        // 물품이 들어오는 곳
-const GATE_X = -4.2         // DL 측정 게이트
-const PACK_X = -0.6         // 포장대 앞(컨베이어가 끝나는 곳)
-const STATION_X = PACK_X + 0.55   // 포장대 가운데 (컨베이어와 겹치지 않게 뒤로)
-const DOOR_X = 1.4          // 트럭 적재함 문(뒤쪽) 위치
+const BELT_Y = 0.8 // 컨베이어 윗면 높이
+const START_X = -7.5 // 물품이 들어오는 곳
+const GATE_X = -4.2 // DL 측정 게이트
+const PACK_X = -0.6 // 포장대 앞(컨베이어가 끝나는 곳)
+const STATION_X = PACK_X + 0.55 // 포장대 가운데 (컨베이어와 겹치지 않게 뒤로)
+const DOOR_X = 1.4 // 트럭 적재함 문(뒤쪽) 위치
 const TRUCK_FLOOR = 0.9
-const PARK_Z = 4.2          // 출발한 트럭이 줄지어 서는 곳(라인에서 떨어진 거리)
-export const LANE_Z = 5.2   // 제안 라인(두 번째 컨베이어)의 위치
+const PARK_Z = 4.2 // 출발한 트럭이 줄지어 서는 곳(라인에서 떨어진 거리)
+export const LANE_Z = 5.2 // 제안 라인(두 번째 컨베이어)의 위치
 
-export const CODE_COLORS = ['#e07a5f', '#3d85c6', '#81b29a', '#f2cc8f', '#9b5de5', '#f15bb5', '#00a6a6', '#8d6e63',
-  '#5c6bc0', '#ef8354']
+export const CODE_COLORS = [
+  '#e07a5f',
+  '#3d85c6',
+  '#81b29a',
+  '#f2cc8f',
+  '#9b5de5',
+  '#f15bb5',
+  '#00a6a6',
+  '#8d6e63',
+  '#5c6bc0',
+  '#ef8354',
+]
 
 export function fillColor(fill) {
   // 낮음(빨강) → 높음(초록)
@@ -22,7 +32,10 @@ export function fillColor(fill) {
   return new THREE.Color().setHSL(0.0 + 0.33 * t, 0.7, 0.5)
 }
 
-function textSprite(text, { size = 64, color = '#bfeaff', bg = 'rgba(6,18,38,0.82)', border = 'rgba(76,201,255,0.7)' } = {}) {
+function textSprite(
+  text,
+  { size = 64, color = '#bfeaff', bg = 'rgba(6,18,38,0.82)', border = 'rgba(76,201,255,0.7)' } = {},
+) {
   const c = document.createElement('canvas')
   const ctx = c.getContext('2d')
   ctx.font = `600 ${size}px sans-serif`
@@ -53,7 +66,9 @@ export function itemInBoxSize(boxSize, itemDims) {
   const order = [0, 1, 2].sort((a, b) => boxSize[b] - boxSize[a])
   const item = [...itemDims].sort((a, b) => b - a)
   const out = [0, 0, 0]
-  order.forEach((axis, i) => { out[axis] = item[i] })
+  order.forEach((axis, i) => {
+    out[axis] = item[i]
+  })
   return out
 }
 
@@ -68,7 +83,7 @@ function boxGeo(sx, sy, sz) {
   return shellGeo.get(key)
 }
 
-const itemMat = new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 })   // 물품은 재질을 같이 쓴다
+const itemMat = new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 }) // 물품은 재질을 같이 쓴다
 
 export function makePackedBox(boxSize, itemDims, color) {
   // boxSize: [x(길이), y(폭), z(높이)] mm, 3D 축은 (x, z→y, y→z)
@@ -81,7 +96,7 @@ export function makePackedBox(boxSize, itemDims, color) {
   g.add(shell, edges)
   const [ix, iy, iz] = itemInBoxSize(boxSize, itemDims)
   const item = new THREE.Mesh(boxGeo(ix, iy, iz).geo, itemMat)
-  item.position.set((ix - sx) * MM / 2, (iz - sz) * MM / 2, (iy - sy) * MM / 2)   // 바닥 한쪽 구석
+  item.position.set(((ix - sx) * MM) / 2, ((iz - sz) * MM) / 2, ((iy - sy) * MM) / 2) // 바닥 한쪽 구석
   g.add(item)
   g.userData = { shell, edges, item }
   return g
@@ -112,7 +127,7 @@ export class World {
     this.controls.target.set(-0.8, 0.8, 2.4)
     this.controls.enableDamping = true
     this.clock = new THREE.Clock()
-    this.flights = []          // 날아가는 물품·상자·트럭 애니메이션 { line, ... }
+    this.flights = [] // 날아가는 물품·상자·트럭 애니메이션 { line, ... }
     this.selectables = []
     this.colorMode = 'code'
     this.codeColor = {}
@@ -121,9 +136,9 @@ export class World {
       new Line(this, 0, { index: 0, name: '기존', title: '기존 라인 · 보유 박스', parkDir: -1 }),
       new Line(this, LANE_Z, { index: 1, name: '제안', title: '제안 라인 · 보유 + 신규 규격', parkDir: 1 }),
     ]
-    this.lines[1].group.visible = false      // 제안 라인은 비교 시뮬레이션에서만 보인다
+    this.lines[1].group.visible = false // 제안 라인은 비교 시뮬레이션에서만 보인다
     this._resize()
-    this.resizer = new ResizeObserver(() => this._resize())   // 패널 크기가 바뀌어도 캔버스를 맞춘다
+    this.resizer = new ResizeObserver(() => this._resize()) // 패널 크기가 바뀌어도 캔버스를 맞춘다
     this.resizer.observe(el)
     this.renderer.domElement.addEventListener('click', (e) => this._pick(e))
     this.renderer.setAnimationLoop(() => this._tick())
@@ -136,8 +151,15 @@ export class World {
     this.controls.dispose()
     const seen = new Set()
     this.scene.traverse((o) => {
-      if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose() }
-      if (o.material) [].concat(o.material).forEach((m) => { m.map?.dispose(); m.dispose() })
+      if (o.geometry && !seen.has(o.geometry)) {
+        seen.add(o.geometry)
+        o.geometry.dispose()
+      }
+      if (o.material)
+        [].concat(o.material).forEach((m) => {
+          m.map?.dispose()
+          m.dispose()
+        })
     })
     shellGeo.clear()
     this.renderer.dispose()
@@ -155,13 +177,15 @@ export class World {
     sun.target.position.set(0, 0, 2.6)
     s.add(sun.target)
     sun.castShadow = true
-    sun.shadow.mapSize.set(1024, 1024)          // 그림자는 태양 하나, 작은 맵(렉 방지)
+    sun.shadow.mapSize.set(1024, 1024) // 그림자는 태양 하나, 작은 맵(렉 방지)
     Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 11, bottom: -11, near: 1, far: 40 })
     s.add(sun)
 
     // 바닥: 짙은 남색 + 빛나는 격자
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 36),
-      new THREE.MeshStandardMaterial({ color: '#0a1628', metalness: 0.35, roughness: 0.45 }))
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(44, 36),
+      new THREE.MeshStandardMaterial({ color: '#0a1628', metalness: 0.35, roughness: 0.45 }),
+    )
     floor.rotation.x = -Math.PI / 2
     floor.position.z = 2.6
     floor.receiveShadow = true
@@ -181,34 +205,65 @@ export class World {
     const s = this.scene
     const m4 = new THREE.Matrix4()
     const steel = new THREE.MeshStandardMaterial({ color: '#1d3557', metalness: 0.6, roughness: 0.45 })
-    const beamMat = new THREE.MeshStandardMaterial({ color: '#c77b2b', metalness: 0.4, roughness: 0.5, emissive: '#2a1200' })
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: '#c77b2b',
+      metalness: 0.4,
+      roughness: 0.5,
+      emissive: '#2a1200',
+    })
     const bays = []
-    for (let x = -12.5; x <= -3.5; x += 2.3) bays.push([x, -7.2])          // 고층 선반 한 줄
+    for (let x = -12.5; x <= -3.5; x += 2.3) bays.push([x, -7.2]) // 고층 선반 한 줄
     const levels = [0, 1.4, 2.8, 4.2]
     const uprights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 5.0, 0.08), steel, bays.length * 4)
-    const beams = new THREE.InstancedMesh(new THREE.BoxGeometry(2.3, 0.1, 0.06), beamMat, bays.length * levels.length * 2)
-    const pallets = new THREE.InstancedMesh(new THREE.BoxGeometry(1.0, 0.12, 1.0), new THREE.MeshStandardMaterial({ color: '#4a3b2a', roughness: 0.9 }), bays.length * levels.length * 2)
-    const cartons = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#8a6a45', roughness: 0.85 }), bays.length * levels.length * 2)
-    let ui = 0, bi = 0, pi = 0
+    const beams = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(2.3, 0.1, 0.06),
+      beamMat,
+      bays.length * levels.length * 2,
+    )
+    const pallets = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.0, 0.12, 1.0),
+      new THREE.MeshStandardMaterial({ color: '#4a3b2a', roughness: 0.9 }),
+      bays.length * levels.length * 2,
+    )
+    const cartons = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: '#8a6a45', roughness: 0.85 }),
+      bays.length * levels.length * 2,
+    )
+    let ui = 0,
+      bi = 0,
+      pi = 0
     const rnd = (k) => (Math.sin(k * 12.9898) * 43758.5453) % 1
     bays.forEach(([x, z], b) => {
-      for (const dx of [-1.15, 1.15]) for (const dz of [-0.5, 0.5]) uprights.setMatrixAt(ui++, m4.makeTranslation(x + dx, 2.5, z + dz))
+      for (const dx of [-1.15, 1.15])
+        for (const dz of [-0.5, 0.5]) uprights.setMatrixAt(ui++, m4.makeTranslation(x + dx, 2.5, z + dz))
       levels.forEach((y, l) => {
         for (const dz of [-0.5, 0.5]) beams.setMatrixAt(bi++, m4.makeTranslation(x, y + 0.35, z + dz))
         for (const dx of [-0.55, 0.55]) {
           pallets.setMatrixAt(pi, m4.makeTranslation(x + dx, y + 0.46, z))
           const h = 0.55 + Math.abs(rnd(b * 31 + l * 7 + dx)) * 0.5
-          cartons.setMatrixAt(pi, new THREE.Matrix4().compose(new THREE.Vector3(x + dx, y + 0.52 + h / 2, z),
-            new THREE.Quaternion(), new THREE.Vector3(0.9, h, 0.9)))
+          cartons.setMatrixAt(
+            pi,
+            new THREE.Matrix4().compose(
+              new THREE.Vector3(x + dx, y + 0.52 + h / 2, z),
+              new THREE.Quaternion(),
+              new THREE.Vector3(0.9, h, 0.9),
+            ),
+          )
           pi++
         }
       })
     })
     s.add(uprights, beams, pallets, cartons)
     // 천장 조명 띠(빛나는 막대만, 실제 광원 없음)
-    const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(6, 0.05, 0.18), new THREE.MeshBasicMaterial({ color: '#9fdcff' }), 12)
+    const strips = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(6, 0.05, 0.18),
+      new THREE.MeshBasicMaterial({ color: '#9fdcff' }),
+      12,
+    )
     let si = 0
-    for (const x of [-9, -2, 5, 12]) for (const z of [-3.2, 2.6, 8.4]) strips.setMatrixAt(si++, m4.makeTranslation(x, 6.4, z))
+    for (const x of [-9, -2, 5, 12])
+      for (const z of [-3.2, 2.6, 8.4]) strips.setMatrixAt(si++, m4.makeTranslation(x, 6.4, z))
     s.add(strips)
   }
 
@@ -225,15 +280,22 @@ export class World {
     this.flights = []
     this.selectables = []
     this.truckMm = truckMm
-    const codes = [...new Map(boxesPerLine.flat().filter(Boolean).map((b) => [b.code, b])).keys()]
+    const codes = [
+      ...new Map(
+        boxesPerLine
+          .flat()
+          .filter(Boolean)
+          .map((b) => [b.code, b]),
+      ).keys(),
+    ]
     this.codeColor = Object.fromEntries(codes.map((c, i) => [c, CODE_COLORS[i % CODE_COLORS.length]]))
     this.isNew = isNew
-    this.compare = !!boxesPerLine[1]          // 두 라인을 같이 돌리면 트럭 이름에 라인을 붙인다
+    this.compare = !!boxesPerLine[1] // 두 라인을 같이 돌리면 트럭 이름에 라인을 붙인다
     this.lines.forEach((line, i) => line.reset(boxesPerLine[i] ?? null))
   }
 
   boxColor(ev) {
-    return this.colorMode === 'fill' ? fillColor(ev.box.fill) : this.codeColor[ev.box.code] ?? '#999'
+    return this.colorMode === 'fill' ? fillColor(ev.box.fill) : (this.codeColor[ev.box.code] ?? '#999')
   }
 
   setColorMode(mode) {
@@ -242,7 +304,9 @@ export class World {
   }
 
   /** 결과로 건너뛰기: bulk 동안은 진열대 라벨을 다시 그리지 않고, 끝나면 재고 숫자를 한 번에 맞춘다 */
-  beginBulk() { this.bulk = true }
+  beginBulk() {
+    this.bulk = true
+  }
 
   endBulk() {
     this.bulk = false
@@ -253,7 +317,10 @@ export class World {
   finishAll() {
     for (const f of this.flights) {
       if (f.done) continue
-      if (f.kind === 'move') { f.obj.position.copy(f.to); f.done = true } else f.line._advance(f, 1)
+      if (f.kind === 'move') {
+        f.obj.position.copy(f.to)
+        f.done = true
+      } else f.line._advance(f, 1)
     }
     this.flights = this.flights.filter((f) => !f.done)
   }
@@ -277,7 +344,11 @@ export class World {
       }
     }
     this.flights = this.flights.filter((f) => !f.done)
-    for (const line of this.lines) line.tick(dt, this.flights.some((f) => f.kind === 'item' && f.line === line))
+    for (const line of this.lines)
+      line.tick(
+        dt,
+        this.flights.some((f) => f.kind === 'item' && f.line === line),
+      )
     this.controls.update()
     this.renderer.render(this.scene, this.camera)
   }
@@ -301,7 +372,7 @@ class Line {
     this.world = world
     this.index = index
     this.name = name
-    this.parkDir = parkDir          // 출발한 트럭이 서는 방향(-1 뒤쪽, 1 앞쪽)
+    this.parkDir = parkDir // 출발한 트럭이 서는 방향(-1 뒤쪽, 1 앞쪽)
     this.group = new THREE.Group()
     this.group.position.z = z
     world.scene.add(this.group)
@@ -315,7 +386,7 @@ class Line {
 
   _build(title) {
     const s = this.group
-    const glowLight = new THREE.PointLight('#33c3ff', 6, 7, 2)   // 포장대 주변 하늘색 조명
+    const glowLight = new THREE.PointLight('#33c3ff', 6, 7, 2) // 포장대 주변 하늘색 조명
     glowLight.position.set(STATION_X, 2.2, -0.8)
     s.add(glowLight)
     const neon = new THREE.MeshBasicMaterial({ color: '#33c3ff' })
@@ -325,8 +396,10 @@ class Line {
       line.position.set(-3.9, 0.004, z)
       s.add(line)
     }
-    const dock = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 3.2),
-      new THREE.MeshBasicMaterial({ color: '#0e3a66', transparent: true, opacity: 0.45 }))
+    const dock = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.8, 3.2),
+      new THREE.MeshBasicMaterial({ color: '#0e3a66', transparent: true, opacity: 0.45 }),
+    )
     dock.rotation.x = -Math.PI / 2
     dock.position.set(DOOR_X + 2.2, 0.004, 0)
     s.add(dock)
@@ -341,15 +414,20 @@ class Line {
     const len = beltEnd - beltStart
     const cx = (beltStart + beltEnd) / 2
     const c = document.createElement('canvas')
-    c.width = 64; c.height = 64
+    c.width = 64
+    c.height = 64
     const g2 = c.getContext('2d')
-    g2.fillStyle = '#121a28'; g2.fillRect(0, 0, 64, 64)
-    g2.fillStyle = '#1d6fa8'; g2.fillRect(0, 0, 4, 64)
+    g2.fillStyle = '#121a28'
+    g2.fillRect(0, 0, 64, 64)
+    g2.fillStyle = '#1d6fa8'
+    g2.fillRect(0, 0, 4, 64)
     this.beltTex = new THREE.CanvasTexture(c)
     this.beltTex.wrapS = this.beltTex.wrapT = THREE.RepeatWrapping
     this.beltTex.repeat.set(len * 6, 1)
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.7),
-      new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.7 }))
+    const belt = new THREE.Mesh(
+      new THREE.BoxGeometry(len, 0.04, 0.7),
+      new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.7 }),
+    )
     belt.position.set(cx, BELT_Y - 0.02, 0)
     belt.receiveShadow = true
     s.add(belt)
@@ -369,12 +447,15 @@ class Line {
     const nRoll = Math.floor(len / 0.25)
     const rollers = new THREE.InstancedMesh(rollerGeo, metal, nRoll)
     const m4 = new THREE.Matrix4()
-    for (let i = 0; i < nRoll; i++) rollers.setMatrixAt(i, m4.makeTranslation(beltStart + 0.1 + i * 0.25, BELT_Y - 0.06, 0))
+    for (let i = 0; i < nRoll; i++)
+      rollers.setMatrixAt(i, m4.makeTranslation(beltStart + 0.1 + i * 0.25, BELT_Y - 0.06, 0))
     s.add(rollers)
     const legXs = []
     for (let x = beltStart + 0.15; x <= beltEnd - 0.1; x += 1.2) legXs.push(x)
     const legs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, BELT_Y - 0.13, 0.06), dark, legXs.length * 2)
-    legXs.forEach((x, i) => [-0.36, 0.36].forEach((z, k) => legs.setMatrixAt(i * 2 + k, m4.makeTranslation(x, (BELT_Y - 0.13) / 2, z))))
+    legXs.forEach((x, i) =>
+      [-0.36, 0.36].forEach((z, k) => legs.setMatrixAt(i * 2 + k, m4.makeTranslation(x, (BELT_Y - 0.13) / 2, z))),
+    )
     legs.castShadow = true
     s.add(legs)
     const titleLabel = textSprite(title, { size: 60 })
@@ -398,7 +479,11 @@ class Line {
     gate.add(top, topLed)
     const camMat = new THREE.MeshStandardMaterial({ color: '#0d1626', metalness: 0.6, roughness: 0.25 })
     const lensMat = new THREE.MeshBasicMaterial({ color: '#7fe0ff' })
-    for (const [y, z] of [[1.85, 0], [1.35, -0.55], [1.35, 0.55]]) {
+    for (const [y, z] of [
+      [1.85, 0],
+      [1.35, -0.55],
+      [1.35, 0.55],
+    ]) {
       const cam = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.09), camMat)
       cam.position.set(0, y, z)
       const lens = new THREE.Mesh(new THREE.CircleGeometry(0.025, 12), lensMat)
@@ -406,8 +491,16 @@ class Line {
       lens.rotation.y = -Math.PI / 2
       gate.add(cam, lens)
     }
-    this.scan = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.05),
-      new THREE.MeshBasicMaterial({ color: '#33c3ff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }))
+    this.scan = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.1, 1.05),
+      new THREE.MeshBasicMaterial({
+        color: '#33c3ff',
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    )
     this.scan.rotation.y = Math.PI / 2
     this.scan.position.y = BELT_Y + 0.5
     gate.add(this.scan)
@@ -423,10 +516,18 @@ class Line {
     const desk = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 1.3), deskMat)
     desk.position.y = BELT_Y - 0.03
     desk.castShadow = desk.receiveShadow = true
-    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(desk.geometry), new THREE.LineBasicMaterial({ color: '#33c3ff' }))
+    const edge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(desk.geometry),
+      new THREE.LineBasicMaterial({ color: '#33c3ff' }),
+    )
     edge.position.copy(desk.position)
     station.add(desk, edge)
-    for (const [x, z] of [[-0.5, -0.6], [0.5, -0.6], [-0.5, 0.6], [0.5, 0.6]]) {
+    for (const [x, z] of [
+      [-0.5, -0.6],
+      [0.5, -0.6],
+      [-0.5, 0.6],
+      [0.5, 0.6],
+    ]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, BELT_Y - 0.06, 0.06), dark)
       leg.position.set(x, (BELT_Y - 0.06) / 2, z)
       station.add(leg)
@@ -444,8 +545,16 @@ class Line {
     s.add(this.robot.group)
 
     // 담을 박스가 없는 물품
-    const bin = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8),
-      new THREE.MeshStandardMaterial({ color: '#ff5a5a', emissive: '#5a0000', transparent: true, opacity: 0.5, roughness: 0.4 }))
+    const bin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.5, 0.8),
+      new THREE.MeshStandardMaterial({
+        color: '#ff5a5a',
+        emissive: '#5a0000',
+        transparent: true,
+        opacity: 0.5,
+        roughness: 0.4,
+      }),
+    )
     bin.position.set(STATION_X, 0.25, 1.7)
     s.add(bin)
     const bl = textSprite('맞는 박스 없음', { color: '#ffb3b3', border: 'rgba(255,90,90,0.7)' })
@@ -453,8 +562,17 @@ class Line {
     s.add(bl)
 
     // 하역장 안전 기둥(볼라드)
-    const bollards = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 12), new THREE.MeshStandardMaterial({ color: '#e7b93c', roughness: 0.5 }), 4)
-    ;[[0.9, -1.7], [0.9, 1.7], [7.4, -1.7], [7.4, 1.7]].forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.45, z)))
+    const bollards = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.07, 0.07, 0.9, 12),
+      new THREE.MeshStandardMaterial({ color: '#e7b93c', roughness: 0.5 }),
+      4,
+    )
+    ;[
+      [0.9, -1.7],
+      [0.9, 1.7],
+      [7.4, -1.7],
+      [7.4, 1.7],
+    ].forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.45, z)))
     s.add(bollards)
   }
 
@@ -511,7 +629,9 @@ class Line {
       wrist.add(f)
     }
     elbow.add(wrist)
-    group.traverse((o) => { if (o.isMesh) o.castShadow = true })
+    group.traverse((o) => {
+      if (o.isMesh) o.castShadow = true
+    })
     return { group, turret, shoulder, elbow, wrist, fingers, t: 1, idle: 0 }
   }
 
@@ -519,7 +639,7 @@ class Line {
   _animateRobot(dt) {
     const r = this.robot
     r.idle += dt
-    const REST = 3.9                         // 쉬는 방향: 포장대 가운데를 본다
+    const REST = 3.9 // 쉬는 방향: 포장대 가운데를 본다
     let yaw = REST + Math.sin(r.idle * 0.6) * 0.12
     let sh = -0.35 + Math.sin(r.idle * 0.9) * 0.05
     let el = 1.2
@@ -528,36 +648,54 @@ class Line {
       r.t = Math.min(1, r.t + dt / r.dur)
       const k = r.t
       const ease = (x) => x * x * (3 - 2 * x)
-      if (k < 0.35) {                       // 진열대 쪽으로 돌아 팔을 뻗는다
+      if (k < 0.35) {
+        // 진열대 쪽으로 돌아 팔을 뻗는다
         const q = ease(k / 0.35)
-        yaw = THREE.MathUtils.lerp(REST, 2.3, q); sh = THREE.MathUtils.lerp(-0.35, -0.95, q); el = THREE.MathUtils.lerp(1.2, 0.7, q)
-      } else if (k < 0.5) {                 // 집는다
-        yaw = 2.3; sh = -0.95; el = 0.7; grip = THREE.MathUtils.lerp(0.045, 0.028, (k - 0.35) / 0.15)
-      } else {                               // 포장대로 돌아와 내려놓는다
+        yaw = THREE.MathUtils.lerp(REST, 2.3, q)
+        sh = THREE.MathUtils.lerp(-0.35, -0.95, q)
+        el = THREE.MathUtils.lerp(1.2, 0.7, q)
+      } else if (k < 0.5) {
+        // 집는다
+        yaw = 2.3
+        sh = -0.95
+        el = 0.7
+        grip = THREE.MathUtils.lerp(0.045, 0.028, (k - 0.35) / 0.15)
+      } else {
+        // 포장대로 돌아와 내려놓는다
         const q = ease((k - 0.5) / 0.5)
-        yaw = THREE.MathUtils.lerp(2.3, REST, q); sh = THREE.MathUtils.lerp(-0.95, -0.55, q); el = THREE.MathUtils.lerp(0.7, 1.4, q)
+        yaw = THREE.MathUtils.lerp(2.3, REST, q)
+        sh = THREE.MathUtils.lerp(-0.95, -0.55, q)
+        el = THREE.MathUtils.lerp(0.7, 1.4, q)
         grip = q > 0.85 ? 0.045 : 0.028
       }
     }
     r.turret.rotation.y = yaw
     r.shoulder.rotation.z = sh
     r.elbow.rotation.z = el
-    r.wrist.rotation.z = -(sh + el) * 0.5     // 집게가 대체로 아래를 보게
+    r.wrist.rotation.z = -(sh + el) * 0.5 // 집게가 대체로 아래를 보게
     r.fingers[0].position.x = -grip
     r.fingers[1].position.x = grip
   }
 
   _rackLabel(code, stock) {
     const tag = this.world.isNew?.has(code) ? '★ 신규\n' : ''
-    return textSprite(`${tag}${code}\n재고 ${stock.toLocaleString('ko-KR')}`, { size: 44,
-      ...(tag ? { color: '#ffe29a', border: 'rgba(255,209,102,0.9)' } : {}) })
+    return textSprite(`${tag}${code}\n재고 ${stock.toLocaleString('ko-KR')}`, {
+      size: 44,
+      ...(tag ? { color: '#ffe29a', border: 'rgba(255,209,102,0.9)' } : {}),
+    })
   }
 
   /** 포장대 뒤 진열대: 이 라인이 쓰는 박스를 크기 순으로 세워 두고, 고를 때마다 그 박스가 반짝이며 재고가 줄어든다 */
   _buildRack(boxes) {
     if (this.rack) {
       this.group.remove(this.rack.group)
-      this.rack.group.traverse((o) => { o.geometry?.dispose(); [].concat(o.material ?? []).forEach((m) => { m.map?.dispose(); m.dispose() }) })
+      this.rack.group.traverse((o) => {
+        o.geometry?.dispose()
+        ;[].concat(o.material ?? []).forEach((m) => {
+          m.map?.dispose()
+          m.dispose()
+        })
+      })
       this.rack = null
     }
     if (!boxes) return
@@ -566,31 +704,46 @@ class Line {
     const gap = 0.18
     const widths = sorted.map((b) => Math.max(...b.dims) * MM)
     const total = widths.reduce((a, w) => a + w, 0) + gap * (sorted.length - 1)
-    const platform = new THREE.Mesh(new THREE.BoxGeometry(total + 0.5, 0.12, 0.8),
-      new THREE.MeshStandardMaterial({ color: '#16243b', metalness: 0.5, roughness: 0.35 }))
-    const pEdge = new THREE.LineSegments(new THREE.EdgesGeometry(platform.geometry), new THREE.LineBasicMaterial({ color: '#33c3ff' }))
+    const platform = new THREE.Mesh(
+      new THREE.BoxGeometry(total + 0.5, 0.12, 0.8),
+      new THREE.MeshStandardMaterial({ color: '#16243b', metalness: 0.5, roughness: 0.35 }),
+    )
+    const pEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(platform.geometry),
+      new THREE.LineBasicMaterial({ color: '#33c3ff' }),
+    )
     pEdge.position.set(0, 0.06, 0)
     group.add(pEdge)
     platform.position.set(0, 0.06, 0)
     platform.receiveShadow = true
     group.add(platform)
-    const back = new THREE.Mesh(new THREE.BoxGeometry(total + 0.5, 1.1, 0.04),
-      new THREE.MeshStandardMaterial({ color: '#0e2a4d', transparent: true, opacity: 0.55, emissive: '#06213f' }))
+    const back = new THREE.Mesh(
+      new THREE.BoxGeometry(total + 0.5, 1.1, 0.04),
+      new THREE.MeshStandardMaterial({ color: '#0e2a4d', transparent: true, opacity: 0.55, emissive: '#06213f' }),
+    )
     back.position.set(0, 0.67, -0.38)
     group.add(back)
     const items = {}
     let x = -total / 2
     sorted.forEach((b, i) => {
-      const [w, d, h] = [...b.dims].sort((p, q) => q - p)    // 넓은 면이 앞으로
+      const [w, d, h] = [...b.dims].sort((p, q) => q - p) // 넓은 면이 앞으로
       const color = this.world.codeColor[b.code]
       const fresh = this.world.isNew?.has(b.code)
       const geo = new THREE.BoxGeometry(w * MM, h * MM, d * MM)
-      const mat = new THREE.MeshStandardMaterial({ color: '#c8a26b', roughness: 0.85, emissive: color, emissiveIntensity: fresh ? 0.35 : 0 })
+      const mat = new THREE.MeshStandardMaterial({
+        color: '#c8a26b',
+        roughness: 0.85,
+        emissive: color,
+        emissiveIntensity: fresh ? 0.35 : 0,
+      })
       const mesh = new THREE.Mesh(geo, mat)
       mesh.castShadow = true
       const cx = x + widths[i] / 2
       mesh.position.set(cx, 0.12 + (h * MM) / 2, 0)
-      const tape = new THREE.Mesh(new THREE.BoxGeometry(w * MM + 0.002, 0.012, 0.05), new THREE.MeshStandardMaterial({ color }))
+      const tape = new THREE.Mesh(
+        new THREE.BoxGeometry(w * MM + 0.002, 0.012, 0.05),
+        new THREE.MeshStandardMaterial({ color }),
+      )
       tape.position.set(cx, 0.12 + h * MM + 0.004, 0)
       group.add(mesh, tape)
       const label = this._rackLabel(b.code, b.stock)
@@ -614,7 +767,7 @@ class Line {
     const it = this.rack?.items[code]
     if (!it) return
     it.stock = stockAfter
-    if (this.world.bulk) return                   // 결과로 건너뛰는 중: 라벨은 끝에 한 번만
+    if (this.world.bulk) return // 결과로 건너뛰는 중: 라벨은 끝에 한 번만
     it.glow = 1
     this._relabel(code, it)
   }
@@ -634,39 +787,65 @@ class Line {
 
   reset(boxes) {
     for (const t of this.trucks) this.group.remove(t.group)
-    if (this.gateReadout) { this.group.remove(this.gateReadout); this.gateReadout = null }
+    if (this.gateReadout) {
+      this.group.remove(this.gateReadout)
+      this.gateReadout = null
+    }
     this.trucks = []
     this.packed = []
     this.binCount = 0
     this.active = !!boxes
     this._buildRack(boxes)
-    this.group.visible = !!boxes                   // 쓰지 않는 라인(기본 시뮬레이션의 제안 라인)은 숨긴다
+    this.group.visible = !!boxes // 쓰지 않는 라인(기본 시뮬레이션의 제안 라인)은 숨긴다
     if (boxes) this._newTruck(1, true)
   }
 
   _truckGroup(no) {
     const [L, W, H] = this.world.truckMm.map((v) => v * MM)
     const g = new THREE.Group()
-    const cargo = new THREE.Mesh(new THREE.BoxGeometry(L, H, W),
-      new THREE.MeshStandardMaterial({ color: '#3fa9ff', emissive: '#08264a', transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }))
+    const cargo = new THREE.Mesh(
+      new THREE.BoxGeometry(L, H, W),
+      new THREE.MeshStandardMaterial({
+        color: '#3fa9ff',
+        emissive: '#08264a',
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    )
     cargo.position.set(L / 2, TRUCK_FLOOR + H / 2, 0)
-    const frame = new THREE.LineSegments(new THREE.EdgesGeometry(cargo.geometry), new THREE.LineBasicMaterial({ color: '#4cc9ff' }))
+    const frame = new THREE.LineSegments(
+      new THREE.EdgesGeometry(cargo.geometry),
+      new THREE.LineBasicMaterial({ color: '#4cc9ff' }),
+    )
     frame.position.copy(cargo.position)
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(L + 1.6, 0.15, W + 0.1), new THREE.MeshStandardMaterial({ color: '#141f33', metalness: 0.5, roughness: 0.4 }))
+    const bed = new THREE.Mesh(
+      new THREE.BoxGeometry(L + 1.6, 0.15, W + 0.1),
+      new THREE.MeshStandardMaterial({ color: '#141f33', metalness: 0.5, roughness: 0.4 }),
+    )
     bed.position.set(L / 2 + 0.8, TRUCK_FLOOR - 0.08, 0)
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, W + 0.1), new THREE.MeshStandardMaterial({ color: '#dfe8f5', metalness: 0.3, roughness: 0.25 }))
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 1.5, W + 0.1),
+      new THREE.MeshStandardMaterial({ color: '#dfe8f5', metalness: 0.3, roughness: 0.25 }),
+    )
     cab.position.set(L + 0.85, TRUCK_FLOOR + 0.75, 0)
     g.add(cargo, frame, bed, cab)
     for (const x of [0.6, L + 0.9]) {
       for (const z of [-W / 2, W / 2]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.25, 20), new THREE.MeshStandardMaterial({ color: '#0b0f17', roughness: 0.6 }))
+        const wheel = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.38, 0.38, 0.25, 20),
+          new THREE.MeshStandardMaterial({ color: '#0b0f17', roughness: 0.6 }),
+        )
         wheel.rotation.x = Math.PI / 2
         wheel.position.set(x, 0.38, z)
         g.add(wheel)
       }
     }
-    const label = textSprite(`${this.world.compare ? `${this.name} ` : ''}트럭 ${no}`,
-      this.index ? { color: '#ffe29a', border: 'rgba(255,209,102,0.8)' } : {})
+    const label = textSprite(
+      `${this.world.compare ? `${this.name} ` : ''}트럭 ${no}`,
+      this.index ? { color: '#ffe29a', border: 'rgba(255,209,102,0.8)' } : {},
+    )
     label.position.set(L / 2, TRUCK_FLOOR + H + 0.45, 0)
     g.add(label)
     cargo.userData.truckNo = no
@@ -681,7 +860,16 @@ class Line {
     this.group.add(g)
     const t = { no, group: g, boxes: [], target: new THREE.Vector3(DOOR_X, 0, 0) }
     this.trucks.push(t)
-    if (!instant) this.world.flights.push({ line: this, obj: g, kind: 'move', from: g.position.clone(), to: t.target.clone(), t: 0, dur: 1.2 })
+    if (!instant)
+      this.world.flights.push({
+        line: this,
+        obj: g,
+        kind: 'move',
+        from: g.position.clone(),
+        to: t.target.clone(),
+        t: 0,
+        dur: 1.2,
+      })
     return t
   }
 
@@ -693,11 +881,20 @@ class Line {
   swapTruck(no, duration) {
     const old = this.current()
     const to = this._parkSlot(this.trucks.length - 1)
-    if (duration === 0) {                          // 결과로 건너뛰기: 애니메이션 없이 바로
+    if (duration === 0) {
+      // 결과로 건너뛰기: 애니메이션 없이 바로
       old.group.position.copy(to)
       return this._newTruck(no, true)
     }
-    this.world.flights.push({ line: this, obj: old.group, kind: 'move', from: old.group.position.clone(), to, t: 0, dur: duration })
+    this.world.flights.push({
+      line: this,
+      obj: old.group,
+      kind: 'move',
+      from: old.group.position.clone(),
+      to,
+      t: 0,
+      dur: duration,
+    })
     const t = this._newTruck(no)
     this.world.flights[this.world.flights.length - 1].dur = duration
     return t
@@ -715,7 +912,10 @@ class Line {
       older.group.visible = false
       this.world.selectables = this.world.selectables.filter((o) => {
         let p = o
-        while (p) { if (p === older.group) return false; p = p.parent }
+        while (p) {
+          if (p === older.group) return false
+          p = p.parent
+        }
         return true
       })
     }
@@ -724,13 +924,25 @@ class Line {
 
   /** 물품 한 건을 컨베이어 → 측정 → 포장 → 트럭으로 흘린다. duration: 전체 걸리는 시간(초), 0이면 바로 적재 */
   push(ev, duration) {
-    const item = new THREE.Mesh(new THREE.BoxGeometry(...[ev.item.dims[0], ev.item.dims[2], ev.item.dims[1]].map((v) => v * MM)),
-      new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 }))
+    const item = new THREE.Mesh(
+      new THREE.BoxGeometry(...[ev.item.dims[0], ev.item.dims[2], ev.item.dims[1]].map((v) => v * MM)),
+      new THREE.MeshStandardMaterial({ color: '#c9b79c', roughness: 0.8 }),
+    )
     item.castShadow = true
     const h = ev.item.dims[2] * MM
     item.position.set(START_X, BELT_Y + h / 2, 0)
     this.group.add(item)
-    const f = { line: this, obj: item, kind: 'item', ev, t: 0, dur: Math.max(duration, 0.0001), h, scanned: false, packed: false }
+    const f = {
+      line: this,
+      obj: item,
+      kind: 'item',
+      ev,
+      t: 0,
+      dur: Math.max(duration, 0.0001),
+      h,
+      scanned: false,
+      packed: false,
+    }
     this.world.flights.push(f)
     if (duration === 0) this._advance(f, 1)
   }
@@ -765,7 +977,7 @@ class Line {
         f.obj.material.dispose()
         this._pickFromRack(ev.box.code, ev.box.stockAfter, f.dur * 0.25)
         const g = makePackedBox(ev.box.size, ev.item.dims, this.world.boxColor(ev))
-        g.position.set(STATION_X, BELT_Y + ev.box.size[2] * MM / 2, 0)
+        g.position.set(STATION_X, BELT_Y + (ev.box.size[2] * MM) / 2, 0)
         this.group.add(g)
         f.obj = g
         f.from = g.position.clone()
@@ -774,7 +986,11 @@ class Line {
         const [px, py, pz] = ev.box.pos
         const [sx, sy, sz] = ev.box.size
         // 트럭 좌표 x=0 이 운전석 쪽(안쪽). 문은 DOOR_X 쪽
-        f.local = new THREE.Vector3((L - px - sx / 2) * MM, TRUCK_FLOOR + (pz + sz / 2) * MM, (py + sy / 2 - W / 2) * MM)
+        f.local = new THREE.Vector3(
+          (L - px - sx / 2) * MM,
+          TRUCK_FLOOR + (pz + sz / 2) * MM,
+          (py + sy / 2 - W / 2) * MM,
+        )
       }
       const q = (p - 0.75) / 0.25
       const dest = f.local.clone().add(f.truck.group.position)
@@ -811,7 +1027,7 @@ class Line {
 
   tick(dt, flowing) {
     this.scan.material.opacity = Math.max(0, this.scan.material.opacity - dt * 1.5)
-    if (flowing) this.beltTex.offset.x -= dt * 1.2   // 물품이 흐를 때만 벨트가 움직인다
+    if (flowing) this.beltTex.offset.x -= dt * 1.2 // 물품이 흐를 때만 벨트가 움직인다
     this._animateRobot(dt)
     if (!this.rack) return
     for (const it of Object.values(this.rack.items)) {

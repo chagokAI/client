@@ -44,7 +44,9 @@ defineEmits(['update:modelValue'])
   background: var(--color-white);
   color: var(--color-text);
   font-size: 13px;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .search-input::placeholder {

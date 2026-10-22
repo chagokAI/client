@@ -9,7 +9,6 @@ import SelectField from '@/components/common/SelectField.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import TextInput from '@/components/common/TextInput.vue'
 
-
 const props = defineProps({
   categories: { type: Array, default: () => [] },
   busy: Boolean,
@@ -21,9 +20,14 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'deactivate'])
 
-const candidates = (props.product.matchCandidates ?? []).map(c => ({ id: c.boxSpec.id,
-  label: `${c.boxSpec.code} · ${c.boxSpec.name}`, dimensions: `${c.boxSpec.innerWidthMm} × ${c.boxSpec.innerDepthMm} × ${c.boxSpec.innerHeightMm} mm`,
-  fillRate: c.fillRatePct, source: c.recommended ? 'dimensions' : '', note: '' }))
+const candidates = (props.product.matchCandidates ?? []).map((c) => ({
+  id: c.boxSpec.id,
+  label: `${c.boxSpec.code} · ${c.boxSpec.name}`,
+  dimensions: `${c.boxSpec.innerWidthMm} × ${c.boxSpec.innerDepthMm} × ${c.boxSpec.innerHeightMm} mm`,
+  fillRate: c.fillRatePct,
+  source: c.recommended ? 'dimensions' : '',
+  note: '',
+}))
 const categoryOptions = props.categories
 
 const form = reactive({
@@ -61,14 +65,9 @@ function handleSave() {
 </script>
 
 <template>
-  <BaseModal
-    title="상품 수정"
-    :description="`${product.name} · ${product.code}`"
-    width="760px"
-    @close="emit('close')"
-  >
+  <BaseModal title="상품 수정" :description="`${product.name} · ${product.code}`" width="760px" @close="emit('close')">
     <template #title-badge>
-      <StatusBadge :label="product.status" />
+      <StatusBadge :label="product.statusLabel" />
     </template>
 
     <form class="product-edit" novalidate @submit.prevent="handleSave">
@@ -92,7 +91,13 @@ function handleSave() {
           </FormField>
 
           <FormField v-slot="{ fieldId }" label="카테고리" required>
-            <SelectField :id="fieldId" v-model="form.category" :options="categoryOptions" width="100%" aria-label="카테고리" />
+            <SelectField
+              :id="fieldId"
+              v-model="form.category"
+              :options="categoryOptions"
+              width="100%"
+              aria-label="카테고리"
+            />
           </FormField>
 
           <FormField v-slot="{ fieldId }" label="무게">
@@ -149,7 +154,9 @@ function handleSave() {
     <template #footer>
       <button class="product-edit__deactivate" type="button" @click="emit('deactivate')">상품 비활성화</button>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" :disabled="busy || (isManualPick && !form.manualReason.trim())" @click="handleSave">저장하기</AppButton>
+      <AppButton variant="primary" :disabled="busy || (isManualPick && !form.manualReason.trim())" @click="handleSave"
+        >저장하기</AppButton
+      >
     </template>
   </BaseModal>
 </template>

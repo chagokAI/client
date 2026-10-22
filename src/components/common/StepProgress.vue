@@ -27,7 +27,13 @@ defineProps({
     >
       <span class="step-progress__marker" aria-hidden="true">
         <svg v-if="index < currentIndex" viewBox="0 0 12 12" fill="none">
-          <path d="m3 6.2 2 2L9 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          <path
+            d="m3 6.2 2 2L9 4"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
         <template v-else>{{ index + 1 }}</template>
       </span>

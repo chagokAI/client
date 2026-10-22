@@ -4,7 +4,10 @@ let csrfRequest = null
 
 export class ApiError extends Error {
   constructor(status, error = {}) {
-    super(error.message || (status >= 500 ? '서버에 연결할 수 없습니다. 잠시 후 다시 시도하세요.' : '요청을 처리하지 못했습니다.'))
+    super(
+      error.message ||
+        (status >= 500 ? '서버에 연결할 수 없습니다. 잠시 후 다시 시도하세요.' : '요청을 처리하지 못했습니다.'),
+    )
     this.status = status
     this.code = error.code
     this.fieldErrors = error.fieldErrors ?? []
@@ -21,15 +24,27 @@ async function read(response) {
 
 async function csrfToken() {
   if (csrf) return csrf
-  if (!csrfRequest) csrfRequest = fetch(`${baseUrl}/auth/csrf`, { credentials: 'include' })
-    .then(read).then((body) => { csrf = body.data; return csrf }).finally(() => { csrfRequest = null })
+  if (!csrfRequest)
+    csrfRequest = fetch(`${baseUrl}/auth/csrf`, { credentials: 'include' })
+      .then(read)
+      .then((body) => {
+        csrf = body.data
+        return csrf
+      })
+      .finally(() => {
+        csrfRequest = null
+      })
   return csrfRequest
 }
 
-export function clearCsrf() { csrf = null }
+export function clearCsrf() {
+  csrf = null
+}
 
 // EventSource(SSE)는 fetch 를 거치지 않으므로 같은 기준 주소로 URL 만 만든다. 세션 쿠키는 같은 출처라 함께 간다.
-export function apiUrl(path) { return `${baseUrl}${path}` }
+export function apiUrl(path) {
+  return `${baseUrl}${path}`
+}
 
 export async function api(path, { method = 'GET', body, query, signal } = {}) {
   const params = new URLSearchParams()
@@ -45,7 +60,11 @@ export async function api(path, { method = 'GET', body, query, signal } = {}) {
   let response
   try {
     response = await fetch(`${baseUrl}${path}${params.size ? `?${params}` : ''}`, {
-      method, credentials: 'include', headers, signal, body: body === undefined ? undefined : JSON.stringify(body),
+      method,
+      credentials: 'include',
+      headers,
+      signal,
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch (error) {
     if (error.name === 'AbortError') throw error

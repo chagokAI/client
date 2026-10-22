@@ -2,7 +2,6 @@ import { warehouseApi } from '@/stores/auth'
 import { World, MiniView, fillColor } from './scene.js'
 import { TRUCK_MM, simulate, vol } from './packing.js'
 
-
 /**
  * 물류공간 디지털트윈 화면을 root 안에 붙인다. 반환값을 부르면 타이머·3D 자원·이벤트를 정리한다.
  * 데이터는 기존 Spring API(로그인 세션)로 받는다: 출고 이벤트·DL 측정 치수 /simulation-state(from·to),
@@ -17,9 +16,16 @@ export function mountTwin(root) {
   const $ = (id) => root.querySelector(`#${id}`)
   const n = (v) => (v ?? 0).toLocaleString('ko-KR')
   // 이벤트 시각(UTC ISO) → 한국 시각
-  const kstTime = (at) => new Date(at).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })
+  const kstTime = (at) =>
+    new Date(at).toLocaleTimeString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
   const kstDateTime = (at) => new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const esc = (s) =>
+    String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
   const LANE_NAMES = ['기존', '제안']
 
   const state = {
@@ -58,11 +64,19 @@ export function mountTwin(root) {
       warehouseApi('/box-inventories', { query: { size: 100 } }),
       warehouseApi('/box-specs', { query: { active: true, size: 100 } }),
     ])
-    const price = Object.fromEntries((specs.data.items ?? specs.data.content ?? []).map((b) => [b.code, b.unitPriceKrw]))
-    return (inv.data.items ?? []).filter((b) => b.innerWidthMm).map((b) => ({
-      code: b.boxCode, name: b.boxName, dims: [b.innerWidthMm, b.innerDepthMm, b.innerHeightMm],
-      price: price[b.boxCode] ?? null, stock: b.onHandQty ?? 0,
-    })).sort((a, b) => a.code.localeCompare(b.code, 'ko'))
+    const price = Object.fromEntries(
+      (specs.data.items ?? specs.data.content ?? []).map((b) => [b.code, b.unitPriceKrw]),
+    )
+    return (inv.data.items ?? [])
+      .filter((b) => b.innerWidthMm)
+      .map((b) => ({
+        code: b.boxCode,
+        name: b.boxName,
+        dims: [b.innerWidthMm, b.innerDepthMm, b.innerHeightMm],
+        price: price[b.boxCode] ?? null,
+        stock: b.onHandQty ?? 0,
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code, 'ko'))
   }
 
   const DL_FROM = '2026-05-01' // DL 측정 치수가 있는 기간
@@ -75,17 +89,29 @@ export function mountTwin(root) {
   async function listProposals() {
     const { data: tasks } = await warehouseApi('/ai-tasks')
     const seen = new Set()
-    return (tasks ?? []).filter((t) => t.proposalId && t.status === 'DONE' && !seen.has(t.proposalId) && seen.add(t.proposalId))
+    return (tasks ?? []).filter(
+      (t) => t.proposalId && t.status === 'DONE' && !seen.has(t.proposalId) && seen.add(t.proposalId),
+    )
   }
 
   /** DB 의 제안서 한 건(기존 /procurement-proposals/{id})을 비교 시뮬레이션 설정으로 바꾼다. 신규 규격이 없으면 null */
   async function loadProposal(id) {
     const { data: p } = await warehouseApi(`/procurement-proposals/${id}`)
-    const qty = Object.fromEntries((p.analysis?.lines ?? []).filter((l) => l.type === 'NEW_SPEC').map((l) => [l.boxCode, l.qty]))
-    const specs = (p.analysis?.newSpecs ?? []).filter((s) => s.dims?.length === 3).map((s) => ({
-      code: s.code, name: s.name, dims: s.dims, price: s.price ?? null, stock: qty[s.code] ?? 0,
-      fillBefore: s.fillBefore, fillAfter: s.fillAfter, replaces: s.replaces ?? [],
-    }))
+    const qty = Object.fromEntries(
+      (p.analysis?.lines ?? []).filter((l) => l.type === 'NEW_SPEC').map((l) => [l.boxCode, l.qty]),
+    )
+    const specs = (p.analysis?.newSpecs ?? [])
+      .filter((s) => s.dims?.length === 3)
+      .map((s) => ({
+        code: s.code,
+        name: s.name,
+        dims: s.dims,
+        price: s.price ?? null,
+        stock: qty[s.code] ?? 0,
+        fillBefore: s.fillBefore,
+        fillAfter: s.fillAfter,
+        replaces: s.replaces ?? [],
+      }))
     if (!specs.length) return null
     // 분석 기간 = 생성 전날까지 90일. 그중 DL 측정 치수가 있는 날만 흘린다
     const to = addDays(kstDate(p.generatedAt), -1)
@@ -105,11 +131,14 @@ export function mountTwin(root) {
       if (seq !== loadSeq) return
       state.proposal = proposal
       if (!proposal) return status('이 제안서에는 신규 규격이 없어 비교할 게 없어요')
-      if (proposal.simFrom > proposal.simTo) return status(`분석 기간(${proposal.from} ~ ${proposal.to})에 DL 측정 치수가 없어요`)
+      if (proposal.simFrom > proposal.simTo)
+        return status(`분석 기간(${proposal.from} ~ ${proposal.to})에 DL 측정 치수가 없어요`)
       $('from').value = `${proposal.simFrom}T00:00`
       $('to').value = `${proposal.simTo}T23:59`
       $('limit').value = MAX_EVENTS
-      status(`${proposal.targetMonth} 제안서로 세팅함 (${proposal.specs.map((s) => s.code).join(', ')} 추가) · 구간 불러오기를 누르세요`)
+      status(
+        `${proposal.targetMonth} 제안서로 세팅함 (${proposal.specs.map((s) => s.code).join(', ')} 추가) · 구간 불러오기를 누르세요`,
+      )
     } catch (e) {
       status(`제안서 불러오기 실패: ${e.message}`)
     }
@@ -126,7 +155,9 @@ export function mountTwin(root) {
     if (mode === 'base') {
       // 비교 탭이 바꿔 둔 구간·건수를 기본 시뮬레이션 값으로 되돌린다
       state.proposal = null
-      Object.entries(baseRange).forEach(([k, v]) => { $(k).value = v })
+      Object.entries(baseRange).forEach(([k, v]) => {
+        $(k).value = v
+      })
       return load()
     }
     pause()
@@ -136,8 +167,13 @@ export function mountTwin(root) {
         $('proposal').innerHTML = ''
         return status('에이전트가 만든 제안서가 아직 없어요 · 개선 실행으로 제안서를 먼저 만들어 주세요')
       }
-      $('proposal').innerHTML = list.map((t) => `<option value="${t.proposalId}">${esc(t.targetMonth)} 발주 제안 · ` +
-        `${esc(kstDateTime(t.completedAt ?? t.createdAt))}</option>`).join('')
+      $('proposal').innerHTML = list
+        .map(
+          (t) =>
+            `<option value="${t.proposalId}">${esc(t.targetMonth)} 발주 제안 · ` +
+            `${esc(kstDateTime(t.completedAt ?? t.createdAt))}</option>`,
+        )
+        .join('')
       await applyProposal(list[0].proposalId)
     } catch (e) {
       status(`제안서 목록 실패: ${e.message}`)
@@ -151,7 +187,7 @@ export function mountTwin(root) {
     let cursor = from
     while (out.length < limit) {
       const { data } = await warehouseApi('/simulation-state', { query: { from: cursor, to, limit: PAGE } })
-      if (seq !== loadSeq) return null              // 그사이 다른 불러오기가 시작됨
+      if (seq !== loadSeq) return null // 그사이 다른 불러오기가 시작됨
       const fresh = data.items.filter((o) => !seen.has(o.eventId))
       fresh.forEach((o) => seen.add(o.eventId))
       out.push(...fresh)
@@ -173,28 +209,40 @@ export function mountTwin(root) {
       const limit = Math.min(Number($('limit').value) || 300, MAX_EVENTS)
       const kst = (v) => `${v}:00+09:00`
       const proposal = state.mode === 'compare' ? state.proposal : null
-      const [boxes, items] = await Promise.all([loadBoxes(), fetchEvents(kst($('from').value), kst($('to').value), limit, seq)])
+      const [boxes, items] = await Promise.all([
+        loadBoxes(),
+        fetchEvents(kst($('from').value), kst($('to').value), limit, seq),
+      ])
       if (seq !== loadSeq || !items) return
       const lanes = [{ name: LANE_NAMES[0], boxes }]
       if (proposal) lanes.push({ name: LANE_NAMES[1], boxes: [...boxes, ...proposal.specs] })
       lanes.forEach((lane, i) => {
         lane.sim = simulate(items, lane.boxes)
-        lane.sim.events.forEach((ev) => { ev.lane = i })
+        lane.sim.events.forEach((ev) => {
+          ev.lane = i
+        })
         lane.done = []
       })
       state.lanes = lanes
       state.proposal = proposal
       state.total = lanes[0].sim.events.length
       state.next = 0
-      world.reset(TRUCK_MM, [boxes, proposal ? lanes[1].boxes : null], new Set(proposal?.specs.map((s) => s.code) ?? []))
+      world.reset(
+        TRUCK_MM,
+        [boxes, proposal ? lanes[1].boxes : null],
+        new Set(proposal?.specs.map((s) => s.code) ?? []),
+      )
       legend()
       $('log').innerHTML = ''
       renderStats()
       $('play').disabled = $('step').disabled = $('skip').disabled = !state.total
       const full = items.length >= limit ? ` (최대 ${n(limit)}건까지)` : ''
-      status(`${n(state.total)}건 불러옴${full} · ` + (compare()
-        ? `트럭 기존 ${lanes[0].sim.trucks}대 · 제안 ${lanes[1].sim.trucks}대 예정`
-        : `트럭 ${lanes[0].sim.trucks}대 예정`))
+      status(
+        `${n(state.total)}건 불러옴${full} · ` +
+          (compare()
+            ? `트럭 기존 ${lanes[0].sim.trucks}대 · 제안 ${lanes[1].sim.trucks}대 예정`
+            : `트럭 ${lanes[0].sim.trucks}대 예정`),
+      )
       openDetail({ type: 'home' }, 'reset')
     } catch (e) {
       status(`불러오기 실패: ${e.message}`)
@@ -212,7 +260,8 @@ export function mountTwin(root) {
 
   /** 다음 물품을 넣기 전에 트럭을 바꿔야 하는 라인들 */
   function lanesToSwap() {
-    return state.lanes.map((lane, i) => ({ i, ev: lane.sim.events[state.next] }))
+    return state.lanes
+      .map((lane, i) => ({ i, ev: lane.sim.events[state.next] }))
       .filter(({ i, ev }) => ev.box && ev.box.truck !== lineOf(i).current().no)
   }
 
@@ -233,7 +282,9 @@ export function mountTwin(root) {
       swapping = true
       const d = stepDuration() === 0 ? 0.3 : 1.5
       swaps.forEach(({ i, ev }) => swap(i, ev, d))
-      setTimeout(() => { swapping = false }, d * 1000)
+      setTimeout(() => {
+        swapping = false
+      }, d * 1000)
       renderStats()
       return false
     }
@@ -248,8 +299,10 @@ export function mountTwin(root) {
       showNow(evs)
       const [a, b] = evs
       const pick = (ev) => (ev.box ? `${ev.box.code} (${ev.box.fill}%)` : '맞는 박스 없음')
-      log(`${kstTime(a.at)} ${a.item.name} → ${pick(a)}${b ? ` | 제안 ${pick(b)}` : ''}`,
-        !a.box ? 'miss' : b?.box && b.box.code !== a.box.code ? 'diff' : '')
+      log(
+        `${kstTime(a.at)} ${a.item.name} → ${pick(a)}${b ? ` | 제안 ${pick(b)}` : ''}`,
+        !a.box ? 'miss' : b?.box && b.box.code !== a.box.code ? 'diff' : '',
+      )
     }
     if (!quiet && (state.next % 5 === 0 || state.next === state.total)) renderStats()
     if (state.next === state.total) {
@@ -260,7 +313,8 @@ export function mountTwin(root) {
     return true
   }
 
-  const truckSummary = () => state.lanes.map((l) => `${compare() ? l.name + ' ' : ''}트럭 ${l.sim.trucks}대`).join(' · ')
+  const truckSummary = () =>
+    state.lanes.map((l) => `${compare() ? l.name + ' ' : ''}트럭 ${l.sim.trucks}대`).join(' · ')
 
   function play() {
     if (!state.lanes.length) return
@@ -306,7 +360,9 @@ export function mountTwin(root) {
   }
 
   // ---------------------------------------------------------------- 화면 조각
-  function status(t) { $('status').textContent = t }
+  function status(t) {
+    $('status').textContent = t
+  }
 
   function log(text, cls) {
     const li = document.createElement('li')
@@ -317,20 +373,33 @@ export function mountTwin(root) {
   }
 
   function showNow([ev, pev]) {
-    const pick = (e) => (e.box ? `<b>${esc(e.box.code)}</b> ${e.box.dims.join('×')}mm · 충전율 <b>${e.box.fill}%</b> · 트럭 ${e.box.truck}`
-      : '보유 박스 어디에도 들어가지 않음')
-    $('now').innerHTML = `<b>${esc(ev.item.name)}</b> · ${ev.item.dims.join('×')}mm <span class="tag">${esc(ev.item.source)}</span><br>` +
-      (pev ? `기존 → ${pick(ev)}<br>제안 → ${pick(pev)}` : `→ ${pick(ev)}${ev.box ? ` · 빈 공간 ${n(ev.box.emptyCm3)}cm³` : ''}`)
+    const pick = (e) =>
+      e.box
+        ? `<b>${esc(e.box.code)}</b> ${e.box.dims.join('×')}mm · 충전율 <b>${e.box.fill}%</b> · 트럭 ${e.box.truck}`
+        : '보유 박스 어디에도 들어가지 않음'
+    $('now').innerHTML =
+      `<b>${esc(ev.item.name)}</b> · ${ev.item.dims.join('×')}mm <span class="tag">${esc(ev.item.source)}</span><br>` +
+      (pev
+        ? `기존 → ${pick(ev)}<br>제안 → ${pick(pev)}`
+        : `→ ${pick(ev)}${ev.box ? ` · 빈 공간 ${n(ev.box.emptyCm3)}cm³` : ''}`)
   }
 
   function legend() {
     const el = $('legend')
     if (world.colorMode === 'fill') {
-      el.innerHTML = [10, 30, 50, 70].map((v) => `<span><i style="background:#${fillColor(v).getHexString()}"></i>${v}%</span>`).join('') +
-        '<span>충전율 낮음 → 높음</span>'
+      el.innerHTML =
+        [10, 30, 50, 70]
+          .map((v) => `<span><i style="background:#${fillColor(v).getHexString()}"></i>${v}%</span>`)
+          .join('') + '<span>충전율 낮음 → 높음</span>'
     } else {
-      el.innerHTML = state.lanes.at(-1).boxes.map((b) => `<span><i style="background:${world.codeColor[b.code]}"></i>${esc(b.code)}` +
-        `${world.isNew.has(b.code) ? ' ★신규' : ''}</span>`).join('')
+      el.innerHTML = state.lanes
+        .at(-1)
+        .boxes.map(
+          (b) =>
+            `<span><i style="background:${world.codeColor[b.code]}"></i>${esc(b.code)}` +
+            `${world.isNew.has(b.code) ? ' ★신규' : ''}</span>`,
+        )
+        .join('')
     }
   }
 
@@ -339,7 +408,7 @@ export function mountTwin(root) {
     const lane = state.lanes[ln]
     const packed = lane.done.filter((e) => e.box)
     return {
-      trucks: lineOf(ln).trucks.filter((t) => t.boxes.length || t === lineOf(ln).current() && packed.length).length,
+      trucks: lineOf(ln).trucks.filter((t) => t.boxes.length || (t === lineOf(ln).current() && packed.length)).length,
       planned: lane.sim.trucks,
       fill: packed.length ? packed.reduce((s, e) => s + e.box.fill, 0) / packed.length : null,
       boxM3: packed.reduce((s, e) => s + vol(e.box.dims), 0) / 1e9,
@@ -351,20 +420,26 @@ export function mountTwin(root) {
   /** 두 라인 비교판: 트럭 수를 아이콘 줄과 숫자로 나란히 보여 준다 */
   function renderCompare() {
     const el = $('compare')
-    if (!compare()) { el.innerHTML = ''; return }
+    if (!compare()) {
+      el.innerHTML = ''
+      return
+    }
     const [a, b] = [laneNow(0), laneNow(1)]
     const diff = a.planned - b.planned
     const pct = a.planned ? Math.round((100 * diff) / a.planned) : 0
     const icons = (k) => '🚚'.repeat(Math.min(k, 30)) + (k > 30 ? ` +${k - 30}` : '')
-    const row = (name, x, cls) => `<div class="cmp__row ${cls}"><span class="cmp__name">${name}</span>` +
+    const row = (name, x, cls) =>
+      `<div class="cmp__row ${cls}"><span class="cmp__name">${name}</span>` +
       `<span class="cmp__trucks">${icons(x.trucks)}</span><b class="cmp__num">${x.trucks}<small>/${x.planned}대</small></b></div>` +
       `<div class="cmp__sub">평균 충전율 ${x.fill == null ? '—' : x.fill.toFixed(1) + '%'} · 상자 부피 ${x.boxM3.toFixed(2)}m³` +
       `${x.fresh ? ` · 신규 규격 ${n(x.fresh)}건` : ''}${x.miss ? ` · 박스 없음 ${n(x.miss)}건` : ''}</div>`
     const done = state.next === state.total
     const p = state.proposal
-    el.innerHTML = `<h3>제안서 효과 <small>${esc(p.targetMonth)} 발주 · ${p.specs.map((s) => esc(s.code)).join(', ')} 추가</small></h3>` +
+    el.innerHTML =
+      `<h3>제안서 효과 <small>${esc(p.targetMonth)} 발주 · ${p.specs.map((s) => esc(s.code)).join(', ')} 추가</small></h3>` +
       `<p class="cmp__basis">분석 기간 ${p.from} ~ ${p.to} · 시뮬레이션 ${$('from').value.slice(0, 10)} ~ ${$('to').value.slice(0, 10)}</p>` +
-      row('기존', a, '') + row('제안', b, 'cmp__row--new') +
+      row('기존', a, '') +
+      row('제안', b, 'cmp__row--new') +
       `<p class="cmp__diff ${diff > 0 ? 'good' : ''}">${diff > 0 ? `트럭 ${diff}대 줄어듦 (−${pct}%)` : diff < 0 ? `트럭 ${-diff}대 늘어남` : '트럭 수 같음'}` +
       `${done ? '' : ' <small>· 전체 구간 기준 예정</small>'}</p>`
   }
@@ -384,30 +459,55 @@ export function mountTwin(root) {
     renderCompare()
     const stats = state.lanes.map((_, i) => boxStatsNow(i))
     const fmt = (s) => (s ? `${n(s.used)}${s.avgFill == null ? '' : ` <small>${s.avgFill.toFixed(1)}%</small>`}` : '—')
-    $('boxStats').innerHTML = (compare()
-      ? '<table><tr><th>호수</th><th class="num">기존 사용</th><th class="num">제안 사용</th><th class="num">제안 재고</th></tr>' +
-        stats[1].map((p) => {
-          const a = stats[0].find((x) => x.code === p.code)
-          return `<tr><td><button class="link" data-code="${esc(p.code)}" data-lane="${a ? 0 : 1}">${esc(p.code)}</button>${world.isNew.has(p.code) ? ' ★' : ''}</td>` +
-            `<td class="num">${fmt(a)}</td><td class="num">${fmt(p)}</td><td class="num">${n(p.stockNow)}</td></tr>`
-        }).join('')
-      : '<table><tr><th>호수</th><th class="num">사용</th><th class="num">평균 충전율</th><th class="num">재고</th></tr>' +
-        stats[0].map((s) => `<tr><td><button class="link" data-code="${esc(s.code)}" data-lane="0">${esc(s.code)}</button></td>` +
-          `<td class="num">${n(s.used)}</td><td class="num">${s.avgFill == null ? '—' : s.avgFill.toFixed(1) + '%'}</td>` +
-          `<td class="num">${n(s.stockNow)}</td></tr>`).join('')) + '</table>'
+    $('boxStats').innerHTML =
+      (compare()
+        ? '<table><tr><th>호수</th><th class="num">기존 사용</th><th class="num">제안 사용</th><th class="num">제안 재고</th></tr>' +
+          stats[1]
+            .map((p) => {
+              const a = stats[0].find((x) => x.code === p.code)
+              return (
+                `<tr><td><button class="link" data-code="${esc(p.code)}" data-lane="${a ? 0 : 1}">${esc(p.code)}</button>${world.isNew.has(p.code) ? ' ★' : ''}</td>` +
+                `<td class="num">${fmt(a)}</td><td class="num">${fmt(p)}</td><td class="num">${n(p.stockNow)}</td></tr>`
+              )
+            })
+            .join('')
+        : '<table><tr><th>호수</th><th class="num">사용</th><th class="num">평균 충전율</th><th class="num">재고</th></tr>' +
+          stats[0]
+            .map(
+              (s) =>
+                `<tr><td><button class="link" data-code="${esc(s.code)}" data-lane="0">${esc(s.code)}</button></td>` +
+                `<td class="num">${n(s.used)}</td><td class="num">${s.avgFill == null ? '—' : s.avgFill.toFixed(1) + '%'}</td>` +
+                `<td class="num">${n(s.stockNow)}</td></tr>`,
+            )
+            .join('')) + '</table>'
     const cap = TRUCK_MM.reduce((a, b) => a * b, 1)
-    $('trucks').innerHTML = state.lanes.map((lane, i) => (compare() ? `<h4>${lane.name} 라인</h4>` : '') +
-      lineOf(i).trucks.map((t) => {
-        const load = (100 * t.boxes.reduce((s, e) => s + vol(e.box.size), 0)) / cap
-        return `<div><button class="link" data-truck="${t.no}" data-lane="${i}">트럭 ${t.no}</button> · ${t.boxes.length}상자 · 적재율 ${load.toFixed(1)}%` +
-          `<div class="bar-fill"><i style="width:${load}%;background:#603c22"></i></div></div>`
-      }).join('')).join('')
+    $('trucks').innerHTML = state.lanes
+      .map(
+        (lane, i) =>
+          (compare() ? `<h4>${lane.name} 라인</h4>` : '') +
+          lineOf(i)
+            .trucks.map((t) => {
+              const load = (100 * t.boxes.reduce((s, e) => s + vol(e.box.size), 0)) / cap
+              return (
+                `<div><button class="link" data-truck="${t.no}" data-lane="${i}">트럭 ${t.no}</button> · ${t.boxes.length}상자 · 적재율 ${load.toFixed(1)}%` +
+                `<div class="bar-fill"><i style="width:${load}%;background:#603c22"></i></div></div>`
+              )
+            })
+            .join(''),
+      )
+      .join('')
   }
 
   // ---------------------------------------------------------------- 상세 패널 (상자 → 물품 원본 → 호수 통계 → 트럭)
   function crumbLabel(c) {
     const p = c.lane != null ? prefix(c.lane) : c.event ? prefix(c.event.lane) : ''
-    return { home: '처음', box: `${p}상자 ${c.event?.box?.code ?? ''}`, item: '물품 원본', code: `${p}${c.code} 통계`, truck: `${p}트럭 ${c.no}` }[c.type]
+    return {
+      home: '처음',
+      box: `${p}상자 ${c.event?.box?.code ?? ''}`,
+      item: '물품 원본',
+      code: `${p}${c.code} 통계`,
+      truck: `${p}트럭 ${c.no}`,
+    }[c.type]
   }
 
   // mode: 'reset'(새로 시작) · 'push'(따라 들어가기) · 'keep'(경로 그대로, 경로 버튼으로 되돌아갈 때)
@@ -416,7 +516,10 @@ export function mountTwin(root) {
     else if (mode === 'push') state.crumbs.push(sel)
     renderCrumbs()
     const d = $('detail')
-    if (mini) { mini.dispose(); mini = null }
+    if (mini) {
+      mini.dispose()
+      mini = null
+    }
     // 처음(home)은 팝업을 닫고, 그 밖에는 팝업으로 띄운다
     $('popup').hidden = sel.type === 'home'
     if (sel.type === 'home') {
@@ -435,15 +538,24 @@ export function mountTwin(root) {
   }
 
   function renderCrumbs() {
-    $('crumbs').innerHTML = state.crumbs.map((c, i) =>
-      `<button data-crumb="${i}" class="${i === state.crumbs.length - 1 ? 'on' : ''}">${esc(crumbLabel(c))}</button>`).join('<span>›</span>')
+    $('crumbs').innerHTML = state.crumbs
+      .map(
+        (c, i) =>
+          `<button data-crumb="${i}" class="${i === state.crumbs.length - 1 ? 'on' : ''}">${esc(crumbLabel(c))}</button>`,
+      )
+      .join('<span>›</span>')
   }
 
   function boxView(ev) {
     const b = ev.box
-    const rows = ev.candidates.map((c) => `<tr class="${c.code === b.code ? 'pick' : c.fits ? '' : 'no'}">` +
-      `<td>${esc(c.code)}${world.isNew.has(c.code) ? ' ★' : ''}</td><td>${c.dims.join('×')}</td><td class="num">${c.fill == null ? '—' : c.fill + '%'}</td>` +
-      `<td class="num">${n(c.stock)}</td><td>${esc(c.reason)}</td></tr>`).join('')
+    const rows = ev.candidates
+      .map(
+        (c) =>
+          `<tr class="${c.code === b.code ? 'pick' : c.fits ? '' : 'no'}">` +
+          `<td>${esc(c.code)}${world.isNew.has(c.code) ? ' ★' : ''}</td><td>${c.dims.join('×')}</td><td class="num">${c.fill == null ? '—' : c.fill + '%'}</td>` +
+          `<td class="num">${n(c.stock)}</td><td>${esc(c.reason)}</td></tr>`,
+      )
+      .join('')
     // 같은 물품이 다른 라인에서는 어떤 박스에 담겼는지
     const other = compare() ? state.lanes[1 - ev.lane].sim.events.find((x) => x.eventId === ev.eventId) : null
     return `<h2>${esc(b.code)} <small>${esc(b.name ?? '')} · ${esc(laneOf(ev).name)} 라인</small></h2>
@@ -486,12 +598,17 @@ export function mountTwin(root) {
   async function loadProduct(id) {
     try {
       const { data: p } = await warehouseApi(`/products/${id}`)
-      const set = (k, v) => { const el = root.querySelector(`[data-product="${k}"]`); if (el) el.textContent = v }
+      const set = (k, v) => {
+        const el = root.querySelector(`[data-product="${k}"]`)
+        if (el) el.textContent = v
+      }
       set('category', p.category?.name ?? '—')
       set('barcode', p.barcode ?? '—')
       set('weight', p.weightG ? `${n(p.weightG)} g` : '—')
       set('label', p.widthMm ? `${p.widthMm} × ${p.depthMm} × ${p.heightMm} mm` : '—')
-    } catch { /* 상품 상세를 못 불러와도 측정값은 보여 준다 */ }
+    } catch {
+      /* 상품 상세를 못 불러와도 측정값은 보여 준다 */
+    }
   }
 
   function codeView(code, ln) {
@@ -514,7 +631,16 @@ export function mountTwin(root) {
       <h3>충전율 분포</h3>
       ${buckets.map((c, i) => `<div>${i * 20}~${i * 20 + 20}% · ${c}개<div class="bar-fill"><i style="width:${(100 * c) / max}%;background:#${fillColor(i * 20 + 10).getHexString()}"></i></div></div>`).join('')}
       <h3>담긴 물품 (최근 10)</h3>
-      <ul>${evs.slice(-10).reverse().map((e) => `<li><button class="link" data-event="${esc(e.eventId)}" data-lane="${ln}">${esc(e.item.name)}</button> ${e.box.fill}%</li>`).join('') || '<li>없음</li>'}</ul>
+      <ul>${
+        evs
+          .slice(-10)
+          .reverse()
+          .map(
+            (e) =>
+              `<li><button class="link" data-event="${esc(e.eventId)}" data-lane="${ln}">${esc(e.item.name)}</button> ${e.box.fill}%</li>`,
+          )
+          .join('') || '<li>없음</li>'
+      }</ul>
       <h3>실린 트럭</h3>
       <p>${trucks.map((t) => `<button class="link" data-goto="truck" data-no="${t}" data-lane="${ln}">트럭 ${t}</button>`).join(' · ') || '—'}</p>`
   }
@@ -527,7 +653,9 @@ export function mountTwin(root) {
     const boxVol = t.boxes.reduce((s, e) => s + vol(e.box.size), 0)
     const itemVol = t.boxes.reduce((s, e) => s + vol(e.item.dims), 0)
     const byCode = {}
-    t.boxes.forEach((e) => { byCode[e.box.code] = (byCode[e.box.code] ?? 0) + 1 })
+    t.boxes.forEach((e) => {
+      byCode[e.box.code] = (byCode[e.box.code] ?? 0) + 1
+    })
     return `<h2>트럭 ${no}${compare() ? ` <small>${esc(state.lanes[ln].name)} 라인</small>` : ''}</h2>
       <dl class="kv">
         <dt>적재함</dt><dd>${TRUCK_MM.join(' × ')} mm</dd>
@@ -537,9 +665,25 @@ export function mountTwin(root) {
         <dt>상태</dt><dd>${t === line.current() ? '싣는 중' : '출발함'}</dd>
       </dl>
       <h3>호수별</h3>
-      <p>${Object.entries(byCode).map(([c, k]) => `<button class="link" data-goto="code" data-code="${esc(c)}" data-lane="${ln}">${esc(c)}</button> ${k}개`).join(' · ') || '—'}</p>
+      <p>${
+        Object.entries(byCode)
+          .map(
+            ([c, k]) =>
+              `<button class="link" data-goto="code" data-code="${esc(c)}" data-lane="${ln}">${esc(c)}</button> ${k}개`,
+          )
+          .join(' · ') || '—'
+      }</p>
       <h3>실린 상자 (최근 10)</h3>
-      <ul>${t.boxes.slice(-10).reverse().map((e) => `<li><button class="link" data-event="${esc(e.eventId)}" data-lane="${ln}">${esc(e.box.code)} · ${esc(e.item.name)}</button> ${e.box.fill}%</li>`).join('') || '<li>없음</li>'}</ul>`
+      <ul>${
+        t.boxes
+          .slice(-10)
+          .reverse()
+          .map(
+            (e) =>
+              `<li><button class="link" data-event="${esc(e.eventId)}" data-lane="${ln}">${esc(e.box.code)} · ${esc(e.item.name)}</button> ${e.box.fill}%</li>`,
+          )
+          .join('') || '<li>없음</li>'
+      }</ul>`
   }
 
   // ---------------------------------------------------------------- 이벤트 연결
@@ -547,7 +691,10 @@ export function mountTwin(root) {
   root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.tab)))
   $('proposal').addEventListener('change', (e) => applyProposal(e.target.value))
   $('play').addEventListener('click', () => (state.playing ? pause() : play()))
-  $('step').addEventListener('click', () => { pause(); pushOne() })
+  $('step').addEventListener('click', () => {
+    pause()
+    pushOne()
+  })
   $('skip').addEventListener('click', skipToEnd)
   $('speed').addEventListener('input', (e) => {
     state.speed = Number(e.target.value)
@@ -563,7 +710,7 @@ export function mountTwin(root) {
     if (!el) return
     const cur = state.crumbs.at(-1)
     // 버튼에 라인이 없으면 지금 보고 있는 것의 라인을 따른다
-    const ln = el.dataset.lane != null ? Number(el.dataset.lane) : cur?.lane ?? cur?.event?.lane ?? 0
+    const ln = el.dataset.lane != null ? Number(el.dataset.lane) : (cur?.lane ?? cur?.event?.lane ?? 0)
     if (el.dataset.crumb) {
       state.crumbs = state.crumbs.slice(0, Number(el.dataset.crumb) + 1)
       openDetail(state.crumbs.at(-1), 'keep')

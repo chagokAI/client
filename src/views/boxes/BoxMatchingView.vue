@@ -1,10 +1,12 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import FilterBar from '@/components/common/FilterBar.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
@@ -13,79 +15,132 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProductDeleteModal from './ProductDeleteModal.vue'
 import ProductEditModal from './ProductEditModal.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { MATCH, productRow } from '@/api/adapters'
-import { useRemote } from '@/composables/useRemote'
+import { MATCH } from '@/api/format'
+import { productRow } from '@/api/rows'
+import { useListQuery } from '@/composables/useListQuery'
+import { useSaveAction } from '@/composables/useSaveAction'
 
-const searchField = ref('name'), keyword = ref(''), category = ref('all'), statusFilter = ref('all'), sort = ref('fill-desc'), page = ref(1)
-const products = ref([]), totalPages = ref(0), counts = ref({}), categories = ref([])
-const editingProduct = ref(null), deletingProduct = ref(null), toastMessage = ref(''), saving = ref(false)
-const { loading, error, load } = useRemote()
-const productSearchFields = [{ value: 'name', label: '상품명' }, { value: 'code', label: '상품코드' }]
-const matchSortOptions = [{ value: 'fill-desc', label: '포장공간비율 높은 순' }, { value: 'fill-asc', label: '포장공간비율 낮은 순' }, { value: 'name', label: '상품명 순' }]
+const searchField = ref('name'),
+  keyword = ref(''),
+  category = ref('all'),
+  statusFilter = ref('all'),
+  sort = ref('fill-desc')
+const products = ref([]),
+  counts = ref({}),
+  categories = ref([])
+const editingProduct = ref(null),
+  deletingProduct = ref(null)
+const { saving, toastMessage, run } = useSaveAction()
+const productSearchFields = [
+  { value: 'name', label: '상품명' },
+  { value: 'code', label: '상품코드' },
+]
+const matchSortOptions = [
+  { value: 'fill-desc', label: '포장공간비율 높은 순' },
+  { value: 'fill-asc', label: '포장공간비율 낮은 순' },
+  { value: 'name', label: '상품명 순' },
+]
 const productCategories = computed(() => [{ value: 'all', label: '카테고리: 전체' }, ...categories.value])
-const statusOptions = computed(() => [{ value: 'all', label: '전체', count: counts.value.ALL ?? 0 }, ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 }))])
+const statusOptions = computed(() => [
+  { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
+  ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
+])
 const rows = computed(() => products.value)
 const columns = [
-  { key: 'name', label: '상품명 / 상품코드', width: '22%' }, { key: 'category', label: '카테고리', width: '10%' },
-  { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' }, { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
-  { key: 'fillRate', label: '포장공간비율', width: '14%' }, { key: 'status', label: '상태', width: '10%' }, { key: 'actions', label: '관리', width: '12%' },
+  { key: 'name', label: '상품명 / 상품코드', width: '22%' },
+  { key: 'category', label: '카테고리', width: '10%' },
+  { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' },
+  { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
+  { key: 'fillRate', label: '포장공간비율', width: '14%' },
+  { key: 'status', label: '상태', width: '10%' },
+  { key: 'actions', label: '관리', width: '12%' },
 ]
-function refresh() {
-  return load(signal => warehouseApi('/product-matches', { signal, query: { searchBy: searchField.value.toUpperCase(), keyword: keyword.value,
-    categoryId: category.value === 'all' ? undefined : category.value, status: statusFilter.value === 'all' ? undefined : statusFilter.value,
-    page: page.value - 1, sort: ({ 'fill-desc': 'fillRatePct,desc', 'fill-asc': 'fillRatePct,asc', name: 'name,asc' })[sort.value] } }),
-  ({ data }) => { products.value = data.items.map(productRow); counts.value = data.counts ?? {}; totalPages.value = data.totalPages })
-}
-watch([searchField, keyword, category, statusFilter, sort], () => { if (page.value !== 1) page.value = 1; else refresh() })
-watch(page, refresh)
+const { loading, error, page, totalPages, refresh } = useListQuery(
+  [searchField, keyword, category, statusFilter, sort],
+  (signal, page) =>
+    warehouseApi('/product-matches', {
+      signal,
+      query: {
+        searchBy: searchField.value.toUpperCase(),
+        keyword: keyword.value,
+        categoryId: category.value === 'all' ? undefined : category.value,
+        status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+        page,
+        sort: { 'fill-desc': 'fillRatePct,desc', 'fill-asc': 'fillRatePct,asc', name: 'name,asc' }[sort.value],
+      },
+    }),
+  ({ data }) => {
+    products.value = data.items.map(productRow)
+    counts.value = data.counts ?? {}
+    return data.totalPages
+  },
+)
 onMounted(async () => {
-  refresh()
-  try { const { data } = await warehouseApi('/categories'); categories.value = data.map(c => ({ value: c.id, label: c.name })) }
-  catch (cause) { toastMessage.value = cause.message }
-})
-function fillTone(value) { return value >= 85 ? 'info' : 'warning' }
-async function openEdit(row) {
-  try { const { data } = await warehouseApi(`/products/${row.id}`); editingProduct.value = productRow(data) }
-  catch (cause) { toastMessage.value = cause.message }
-}
-async function handleSave(form) {
-  if (saving.value) return
-  saving.value = true
   try {
+    const { data } = await warehouseApi('/categories')
+    categories.value = data.map((c) => ({ value: c.id, label: c.name }))
+  } catch (cause) {
+    toastMessage.value = cause.message
+  }
+})
+function fillTone(value) {
+  return value >= 85 ? 'info' : 'warning'
+}
+async function openEdit(row) {
+  try {
+    const { data } = await warehouseApi(`/products/${row.id}`)
+    editingProduct.value = productRow(data)
+  } catch (cause) {
+    toastMessage.value = cause.message
+  }
+}
+function handleSave(form) {
+  return run(async () => {
     const dimensions = [form.width, form.depth, form.height].map(Number)
-    if (!form.name.trim() || dimensions.some(v => !Number.isInteger(v) || v <= 0)) throw new Error('상품명과 양수 정수 치수를 입력해 주세요.')
-    await warehouseApi(`/products/${editingProduct.value.id}`, { method: 'PATCH', body: {
-      expectedVersion: editingProduct.value.version, name: form.name.trim(), categoryId: form.category || undefined,
-      widthMm: dimensions[0], depthMm: dimensions[1], heightMm: dimensions[2], weightG: form.weight === '' ? undefined : Number(form.weight),
-      boxSpecId: form.matchedBoxId || undefined, matchOverrideReason: form.manualReason || undefined,
-    } })
-    editingProduct.value = null; toastMessage.value = '상품 정보가 저장되었습니다.'; await refresh()
-  } catch (cause) { toastMessage.value = cause.message }
-  finally { saving.value = false }
+    if (!form.name.trim() || dimensions.some((v) => !Number.isInteger(v) || v <= 0))
+      throw new Error('상품명과 양수 정수 치수를 입력해 주세요.')
+    await warehouseApi(`/products/${editingProduct.value.id}`, {
+      method: 'PATCH',
+      body: {
+        expectedVersion: editingProduct.value.version,
+        name: form.name.trim(),
+        categoryId: form.category || undefined,
+        widthMm: dimensions[0],
+        depthMm: dimensions[1],
+        heightMm: dimensions[2],
+        weightG: form.weight === '' ? undefined : Number(form.weight),
+        boxSpecId: form.matchedBoxId || undefined,
+        matchOverrideReason: form.manualReason || undefined,
+      },
+    })
+    editingProduct.value = null
+    await refresh()
+  }, '상품 정보가 저장되었습니다.')
 }
-async function deactivate(target) {
-  if (saving.value) return
-  saving.value = true
-  try { await warehouseApi(`/products/${target.id}`, { method: 'DELETE', query: { expectedVersion: target.version } });
-    editingProduct.value = null; deletingProduct.value = null; toastMessage.value = '상품이 비활성화되었습니다.'; await refresh()
-  } catch (cause) { toastMessage.value = cause.message }
-  finally { saving.value = false }
+function deactivate(target) {
+  return run(async () => {
+    await warehouseApi(`/products/${target.id}`, { method: 'DELETE', query: { expectedVersion: target.version } })
+    editingProduct.value = null
+    deletingProduct.value = null
+    await refresh()
+  }, '상품이 비활성화되었습니다.')
 }
-function handleDeactivate() { return deactivate(editingProduct.value) }
-function handleDelete() { return deactivate(deletingProduct.value) }
+function handleDeactivate() {
+  return deactivate(editingProduct.value)
+}
+function handleDelete() {
+  return deactivate(deletingProduct.value)
+}
 </script>
 
 <template>
   <div class="box-matching">
+    <PageHeader title="물품-박스 매칭 현황" description="상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다." />
+
     <ApiState :loading="loading" :error="error" @retry="refresh" />
-    <div class="box-matching__filters">
+    <FilterBar>
       <div class="box-matching__search">
-        <SelectField
-          v-model="searchField"
-          :options="productSearchFields"
-          width="110px"
-          aria-label="검색 기준"
-        />
+        <SelectField v-model="searchField" :options="productSearchFields" width="110px" aria-label="검색 기준" />
         <SearchInput
           v-model="keyword"
           class="box-matching__keyword"
@@ -105,7 +160,7 @@ function handleDelete() { return deactivate(deletingProduct.value) }
         width="180px"
         aria-label="정렬 기준"
       />
-    </div>
+    </FilterBar>
 
     <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 상품이 없습니다.">
       <template #cell-name="{ row }">
@@ -131,13 +186,15 @@ function handleDelete() { return deactivate(deletingProduct.value) }
       </template>
 
       <template #cell-status="{ row }">
-        <StatusBadge :label="row.status" />
+        <StatusBadge :label="row.statusLabel" />
       </template>
 
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <AppButton size="sm" :disabled="!auth.canEdit.value" @click="openEdit(row)">수정</AppButton>
-          <AppButton size="sm" variant="danger-outline" :disabled="!auth.canEdit.value" @click="deletingProduct = row">삭제</AppButton>
+          <AppButton size="sm" variant="danger-outline" :disabled="!auth.canEdit.value" @click="deletingProduct = row"
+            >삭제</AppButton
+          >
         </div>
       </template>
     </DataTable>
@@ -166,14 +223,6 @@ function handleDelete() { return deactivate(deletingProduct.value) }
 </template>
 
 <style scoped>
-.box-matching__filters {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
 .box-matching__search {
   display: flex;
   align-items: center;
@@ -240,16 +289,6 @@ function handleDelete() { return deactivate(deletingProduct.value) }
 .fill-rate__value {
   font-size: 13px;
   font-weight: 600;
-}
-
-.cell--empty {
-  color: var(--color-text-muted);
-}
-
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .box-matching__pagination {

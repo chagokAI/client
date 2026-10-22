@@ -30,7 +30,6 @@ const visibleNotifications = computed(() => {
   }
   return props.notifications.filter((item) => item.category === activeFilter.value)
 })
-
 </script>
 
 <template>
@@ -40,7 +39,9 @@ const visibleNotifications = computed(() => {
         알림
         <span v-if="unreadCount" class="notification-panel__count">{{ unreadCount }}</span>
       </h2>
-      <button class="notification-panel__read-all" type="button" disabled title="읽음 처리는 준비 중이에요">모두 읽음</button>
+      <button class="notification-panel__read-all" type="button" disabled title="읽음 처리는 준비 중이에요">
+        모두 읽음
+      </button>
     </header>
 
     <div class="notification-panel__filters">
