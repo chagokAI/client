@@ -18,6 +18,11 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  // 열이 많아 좁은 화면에서 가로 스크롤이 필요한 표에 지정합니다. (예: '1440px')
+  minWidth: {
+    type: String,
+    default: '720px',
+  },
   emptyText: {
     type: String,
     default: '표시할 데이터가 없습니다.',
@@ -27,7 +32,7 @@ defineProps({
 
 <template>
   <div class="data-table" :class="{ 'data-table--flush': flush }">
-    <table class="data-table__table">
+    <table class="data-table__table" :style="{ minWidth }">
       <colgroup>
         <col v-for="column in columns" :key="column.key" :style="column.width ? { width: column.width } : undefined" />
       </colgroup>
@@ -108,7 +113,6 @@ defineProps({
 
 .data-table__table {
   width: 100%;
-  min-width: 720px;
   border-collapse: collapse;
   font-size: 13px;
 }

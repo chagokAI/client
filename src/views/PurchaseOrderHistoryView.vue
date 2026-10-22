@@ -1,26 +1,28 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import FilterBar from '@/components/common/FilterBar.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import SelectField from '@/components/common/SelectField.vue'
-import StatCard from '@/components/common/StatCard.vue'
+import StatGrid from '@/components/common/StatGrid.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PurchaseOrderDetailModal from './PurchaseOrderDetailModal.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import DateField from '@/components/common/DateField.vue'
 import { warehouseApi } from '@/stores/auth'
-import { ORDER, orderRow, orderDetail, localDate, currency, number } from '@/api/adapters'
-import { useRemote } from '@/composables/useRemote'
-const keyword = ref(''), statusFilter = ref('all'), sort = ref('ordered-desc'), page = ref(1), totalPages = ref(0)
+import { ORDER, currency, localDate, number } from '@/api/format'
+import { orderRow } from '@/api/rows'
+import { orderDetail } from '@/api/models'
+import { useListQuery } from '@/composables/useListQuery'
+const keyword = ref(''), statusFilter = ref('all'), sort = ref('ordered-desc')
 const today = localDate(), [year, month] = today.split('-').map(Number)
 const from = ref(localDate(new Date(Date.UTC(year, month - 3, 1, 12)))), to = ref(today)
 const orders = ref([]), counts = ref({}), summary = ref(null), openedDetail = ref(null), toastMessage = ref('')
-const { loading, error, load } = useRemote()
 const historyPeriod = computed(() => `조회 기간 ${from.value} – ${to.value}`)
 const historySortOptions = [{ value: 'ordered-desc', label: '최신 발주일 순' }, { value: 'ordered-asc', label: '오래된 발주일 순' }, { value: 'amount-desc', label: '발주 금액 높은 순' }]
 const columns = [
@@ -37,14 +39,16 @@ const stats = computed(() => [
   { id: 'in-progress', label: '진행 중 발주', value: `${number(summary.value?.inProgressCount)}건`, hint: '승인 완료 · 배송 중' },
   { id: 'lead', label: '평균 납품 리드타임', value: summary.value?.averageDeliveryLeadTimeDays == null ? '—' : `${number(summary.value.averageDeliveryLeadTimeDays)}일`, hint: '실제 입고 완료 건 기준' },
 ])
-function refresh() {
-  if (!from.value || !to.value) return
-  return load(signal => warehouseApi('/purchase-orders', { signal, query: { from: from.value, to: to.value, keyword: keyword.value,
-    status: statusFilter.value === 'all' ? undefined : statusFilter.value, page: page.value - 1,
-    sort: ({ 'ordered-desc': 'createdAt,desc', 'ordered-asc': 'createdAt,asc', 'amount-desc': 'totalAmountKrw,desc' })[sort.value] } }),
-  ({ data }) => { orders.value = data.items.map(orderRow); counts.value = data.counts; summary.value = data.summary; totalPages.value = data.totalPages })
-}
-watch([keyword, statusFilter, sort, from, to], () => { if (page.value !== 1) page.value = 1; else refresh() }); watch(page, refresh); onMounted(refresh)
+// 조회 기간을 비우는 중에는(날짜 입력이 반쯤 지워진 상태) 조회하지 않습니다.
+const { loading, error, page, totalPages, refresh } = useListQuery(
+  [keyword, statusFilter, sort, from, to],
+  (signal, page) => from.value && to.value
+    ? warehouseApi('/purchase-orders', { signal, query: { from: from.value, to: to.value, keyword: keyword.value,
+      status: statusFilter.value === 'all' ? undefined : statusFilter.value, page,
+      sort: ({ 'ordered-desc': 'createdAt,desc', 'ordered-asc': 'createdAt,asc', 'amount-desc': 'totalAmountKrw,desc' })[sort.value] } })
+    : null,
+  ({ data }) => { orders.value = data.items.map(orderRow); counts.value = data.counts; summary.value = data.summary; return data.totalPages },
+)
 async function openDetail(row) {
   try { const { data } = await warehouseApi(`/purchase-orders/${row.id}`); openedDetail.value = orderDetail(data) }
   catch (cause) { toastMessage.value = cause.message }
@@ -60,17 +64,9 @@ async function openDetail(row) {
       :meta="historyPeriod"
     />
 
-    <div class="purchase-order-history__stats">
-      <StatCard
-        v-for="stat in stats"
-        :key="stat.id"
-        :label="stat.label"
-        :value="stat.value"
-        :hint="stat.hint"
-      />
-    </div>
+    <StatGrid :stats="stats" />
 
-    <div class="purchase-order-history__filters">
+    <FilterBar>
       <DateField v-model="from" :max="to" aria-label="조회 시작일" />
       <DateField v-model="to" :min="from" aria-label="조회 종료일" />
       <SearchInput
@@ -87,7 +83,7 @@ async function openDetail(row) {
         width="160px"
         aria-label="정렬 기준"
       />
-    </div>
+    </FilterBar>
 
     <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 발주서가 없습니다.">
       <template #cell-number="{ row }">
@@ -99,7 +95,7 @@ async function openDetail(row) {
       </template>
 
       <template #cell-status="{ row }">
-        <StatusBadge :label="row.status" />
+        <StatusBadge :label="row.statusLabel" />
       </template>
 
       <template #cell-detail="{ row }">
@@ -121,21 +117,6 @@ async function openDetail(row) {
 </template>
 
 <style scoped>
-.purchase-order-history__stats {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 20px;
-}
-
-.purchase-order-history__filters {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
 .purchase-order-history__sort {
   margin-left: auto;
 }
@@ -155,9 +136,6 @@ async function openDetail(row) {
   text-decoration: underline;
 }
 
-.cell--empty {
-  color: var(--color-text-muted);
-}
 
 .purchase-order-history__pagination {
   margin-top: 24px;
@@ -171,9 +149,4 @@ async function openDetail(row) {
   word-break: keep-all;
 }
 
-@media (max-width: 1180px) {
-  .purchase-order-history__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 </style>

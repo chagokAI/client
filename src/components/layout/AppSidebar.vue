@@ -5,7 +5,7 @@ import NotificationPanel from './NotificationPanel.vue'
 import ProfileMenu from './ProfileMenu.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { notificationRow } from '@/api/adapters'
+import { notificationRow } from '@/api/rows'
 import { useSidebar } from '@/composables/useSidebar'
 
 const { isCollapsed, isMobileOpen, toggle, expand, openMobile, closeMobile } = useSidebar()

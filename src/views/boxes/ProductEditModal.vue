@@ -68,7 +68,7 @@ function handleSave() {
     @close="emit('close')"
   >
     <template #title-badge>
-      <StatusBadge :label="product.status" />
+      <StatusBadge :label="product.statusLabel" />
     </template>
 
     <form class="product-edit" novalidate @submit.prevent="handleSave">

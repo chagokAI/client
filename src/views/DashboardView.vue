@@ -5,7 +5,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { dashboardModel } from '@/api/adapters'
+import { dashboardModel } from '@/api/models'
 import { useRemote } from '@/composables/useRemote'
 import ApiState from '@/components/common/ApiState.vue'
 import DigitalTwinViewer from '@/components/dashboard/DigitalTwinViewer.vue'
@@ -25,7 +25,7 @@ onMounted(refresh)
 const router = useRouter()
 
 // 규격별 재고 막대는 가장 큰 값 기준으로 비율을 잡습니다.
-const inventoryTotal = computed(() => inventorySummary.bySize.reduce((sum, item) => sum + item.ratio, 0))
+const inventoryTotal = computed(() => inventorySummary.value.bySize.reduce((sum, item) => sum + item.ratio, 0))
 
 function goToOrder() {
   router.push('/orders')

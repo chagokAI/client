@@ -90,3 +90,57 @@ label {
   outline: 3px solid var(--color-gold);
   outline-offset: 3px;
 }
+
+/* 표 안에서 되풀이되는 칸 모양. 뷰마다 복사하지 않도록 전역으로 둡니다. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cell--empty {
+  color: var(--color-text-muted);
+}
+
+/* 카드 머리글과 '아직 없음' 안내도 여러 화면이 같은 모양을 씁니다. */
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+}
+
+.card-meta {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.empty-state {
+  padding: 32px 16px;
+  border: 1px dashed var(--color-card-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.empty-state__text {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: keep-all;
+}

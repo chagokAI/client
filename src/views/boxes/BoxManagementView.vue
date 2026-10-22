@@ -1,13 +1,14 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import FilterBar from '@/components/common/FilterBar.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
-import StatCard from '@/components/common/StatCard.vue'
+import StatGrid from '@/components/common/StatGrid.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import BoxSpecDeleteModal from './BoxSpecDeleteModal.vue'
 import BoxSpecFormModal from './BoxSpecFormModal.vue'
@@ -15,13 +16,15 @@ import StockInModal from './StockInModal.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { specRow, inventoryRow, quantity, number } from '@/api/adapters'
-import { useRemote } from '@/composables/useRemote'
-const keyword = ref(''), statusFilter = ref('all'), page = ref(1), totalPages = ref(0)
+import { quantity, number } from '@/api/format'
+import { specRow, inventoryRow } from '@/api/rows'
+import { useListQuery } from '@/composables/useListQuery'
+import { useSaveAction } from '@/composables/useSaveAction'
+const keyword = ref(''), statusFilter = ref('all')
 const specs = ref([]), counts = ref({}), summary = ref(null)
 const inventories = ref([]), inventorySummary = ref(null)
-const formModal = ref(null), deletingSpec = ref(null), stockInSpec = ref(null), toastMessage = ref(''), saving = ref(false)
-const { loading, error, load } = useRemote()
+const formModal = ref(null), deletingSpec = ref(null), stockInSpec = ref(null)
+const { saving, toastMessage, run } = useSaveAction()
 const columns = [
   { key: 'actions', label: '관리', width: '180px' }, { key: 'code', label: '박스 규격명', width: '190px' },
   { key: 'current', label: '현재 재고', width: '100px' }, { key: 'safety', label: '안전 재고', width: '100px' },
@@ -29,7 +32,7 @@ const columns = [
   { key: 'linkedProducts', label: '연결 상품 수', width: '110px' }, { key: 'status', label: '사용 여부', width: '100px' },
   { key: 'supplier', label: '공급사', width: '130px' }, { key: 'description', label: '간단 설명', width: '240px' },
 ]
-const TONE_BY_STATUS = { 충분: 'info', 주의: 'warning', 부족: 'danger', 미확인: 'neutral' }
+const TONE_BY_STOCK = { SUFFICIENT: 'info', CAUTION: 'warning', SHORTAGE: 'danger', UNKNOWN: 'neutral' }
 const inventoryStats = computed(() => [
   { id: 'total', label: '총 보유 박스', value: quantity(inventorySummary.value?.totalOnHandQty), hint: `${number(inventorySummary.value?.activeSpecCount)}개 규격 운영 중` },
   { id: 'shortage', label: '재고 부족 규격', value: `${number(inventorySummary.value?.shortageSpecCount)}개`, hint: '안전 재고 미만', tone: 'danger' },
@@ -43,19 +46,22 @@ const specSummary = computed(() => `총 ${number(summary.value?.totalSpecCount)}
 const supplierOptions = ref([{ value: '', label: '미지정' }])
 // 규격과 재고는 API가 나뉘어 있어 함께 불러온 뒤 규격명(code) 기준으로 한 행에 묶습니다.
 // TODO: /box-specs 응답에 재고(현재·안전·재고 수준)와 요약이 포함되면 호출 하나로 줄입니다.
-function refresh() {
-  return load(signal => Promise.all([
-    warehouseApi('/box-specs', { signal, query: { keyword: keyword.value, page: page.value - 1, size: 100,
+const { loading, error, page, totalPages, refresh } = useListQuery(
+  [keyword, statusFilter],
+  (signal, page) => Promise.all([
+    warehouseApi('/box-specs', { signal, query: { keyword: keyword.value, page, size: 100,
       active: statusFilter.value === 'ACTIVE' ? true : statusFilter.value === 'INACTIVE' ? false : undefined,
       custom: statusFilter.value === 'CUSTOM' ? true : undefined } }),
     warehouseApi('/box-inventories', { signal, query: { size: 100 } }),
-  ]), ([{ data }, { data: stockData }]) => {
+  ]),
+  ([{ data }, { data: stockData }]) => {
     inventories.value = stockData.items.map(inventoryRow); inventorySummary.value = stockData.summary
     const stockByCode = new Map(inventories.value.map(item => [item.code, item]))
     specs.value = data.items.map(specRow).map(spec => ({ ...spec, stock: stockByCode.get(spec.code) ?? null }))
-    counts.value = data.counts; summary.value = data.summary; totalPages.value = data.totalPages
-  })
-}
+    counts.value = data.counts; summary.value = data.summary
+    return data.totalPages
+  },
+)
 async function loadSuppliers() {
   // 공급사 조회 API 연결 전에는 저장된 규격의 공급사만 선택할 수 있다.
   try { const { data } = await warehouseApi('/box-specs', { query: { size: 100 } });
@@ -63,14 +69,11 @@ async function loadSuppliers() {
     supplierOptions.value = [{ value: '', label: '미지정' }, ...suppliers.values()]
   } catch (cause) { toastMessage.value = cause.message }
 }
-watch([keyword, statusFilter], () => { if (page.value !== 1) page.value = 1; else refresh() }); watch(page, refresh)
-onMounted(() => { refresh(); loadSuppliers() })
+onMounted(loadSuppliers)
 function openCreate() { formModal.value = { spec: null } }
 function openEdit(spec) { formModal.value = { spec } }
-async function handleSave(form) {
-  if (saving.value) return
-  saving.value = true
-  try {
+function handleSave(form) {
+  return run(async () => {
     const dims = [form.width, form.depth, form.height].map(Number)
     if (!form.code.trim() || !form.sizeName.trim() || dims.some(v => !Number.isInteger(v) || v <= 0) || !Number.isInteger(Number(form.unitPriceKrw)) || Number(form.unitPriceKrw) < 0)
       throw new Error('규격명·사이즈명, 양수 정수 치수와 0 이상 단가를 입력하세요.')
@@ -86,35 +89,29 @@ async function handleSave(form) {
     if (target?.stock && Number(form.safetyQty) !== target.stock.safetyQty)
       await warehouseApi(`/box-inventories/${target.stock.id}/policy`, { method: 'PATCH',
         body: { expectedVersion: target.stock.version, safetyQty: Number(form.safetyQty), alertEnabled: target.stock.alertEnabled ?? true } })
-    formModal.value = null; toastMessage.value = '박스 규격이 저장되었습니다.'; await refresh(); loadSuppliers()
-  } catch (cause) { toastMessage.value = cause.message }
-  finally { saving.value = false }
+    formModal.value = null; await refresh(); loadSuppliers()
+  }, '박스 규격이 저장되었습니다.')
 }
-async function requestDelete() {
-  if (saving.value) return
-  saving.value = true
-  try { await warehouseApi(`/box-specs/${deletingSpec.value.id}`, { method: 'DELETE', query: { expectedVersion: deletingSpec.value.version } });
-    deletingSpec.value = null; toastMessage.value = '규격이 삭제되었습니다.'; await refresh()
-  } catch (cause) { toastMessage.value = cause.message }
-  finally { saving.value = false }
+function requestDelete() {
+  return run(async () => {
+    await warehouseApi(`/box-specs/${deletingSpec.value.id}`, { method: 'DELETE', query: { expectedVersion: deletingSpec.value.version } })
+    deletingSpec.value = null; await refresh()
+  }, '규격이 삭제되었습니다.')
 }
-async function handleStockInSubmit(form) {
-  if (saving.value) return
-  saving.value = true
-  try {
+function handleStockInSubmit(form) {
+  return run(async () => {
     const qty = Number(form.quantity)
     if (!Number.isInteger(qty) || qty <= 0) throw new Error('입고 수량은 양수 정수로 입력해 주세요.')
     const target = inventories.value.find(item => item.id === form.specId)
     await warehouseApi('/inventory-receipts', { method: 'POST', body: { requestId: form.requestId, boxSpecId: form.specId,
       expectedVersion: target.version, purchaseOrderId: form.orderNumber || undefined, qty, receivedDate: form.receivedAt, memo: form.memo || undefined } })
-    stockInSpec.value = null; toastMessage.value = '입고가 등록되었습니다.'; await refresh()
-  } catch (cause) { toastMessage.value = cause.message }
-  finally { saving.value = false }
+    stockInSpec.value = null; await refresh()
+  }, '입고가 등록되었습니다.')
 }
 </script>
 
 <template>
-  <div class="box-spec">
+  <div class="box-management">
     <PageHeader
       title="박스 재고/규격 관리"
       description="택배 상자 규격 정보와 규격별 재고를 함께 확인하고 관리합니다."
@@ -126,18 +123,9 @@ async function handleStockInSubmit(form) {
 
     <ApiState :loading="loading" :error="error" @retry="refresh" />
 
-    <div class="box-spec__stats">
-      <StatCard
-        v-for="stat in inventoryStats"
-        :key="stat.id"
-        :label="stat.label"
-        :value="stat.value"
-        :hint="stat.hint"
-        :tone="stat.tone ?? 'default'"
-      />
-    </div>
+    <StatGrid :stats="inventoryStats" />
 
-    <div class="box-spec__filters">
+    <FilterBar>
       <SearchInput
         v-model="keyword"
         width="320px"
@@ -145,10 +133,10 @@ async function handleStockInSubmit(form) {
         aria-label="박스 규격 검색"
       />
       <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="규격 사용 여부" />
-      <span class="box-spec__summary">{{ specSummary }}</span>
-    </div>
+      <template #aside>{{ specSummary }}</template>
+    </FilterBar>
 
-    <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 규격이 없습니다.">
+    <DataTable :columns="columns" :rows="rows" row-key="id" min-width="1440px" empty-text="조건에 맞는 규격이 없습니다.">
       <template #cell-code="{ row }">
         <span class="spec-code">
           <strong>{{ row.code }}</strong>
@@ -168,7 +156,7 @@ async function handleStockInSubmit(form) {
 
       <template #cell-level="{ row }">
         <div v-if="row.stock?.level != null" class="level">
-          <ProgressBar :value="row.stock.level" :tone="TONE_BY_STATUS[row.stock.status]" :label="`${row.code} 재고 수준`" />
+          <ProgressBar :value="row.stock.level" :tone="TONE_BY_STOCK[row.stock.status]" :label="`${row.code} 재고 수준`" />
           <span class="level__value">{{ row.stock.level }}%</span>
         </div>
         <span v-else class="cell--empty">—</span>
@@ -179,7 +167,7 @@ async function handleStockInSubmit(form) {
       </template>
 
       <template #cell-status="{ row }">
-        <StatusBadge :label="row.status" />
+        <StatusBadge :label="row.statusLabel" />
       </template>
 
       <template #cell-actions="{ row }">
@@ -187,7 +175,7 @@ async function handleStockInSubmit(form) {
           <AppButton size="sm" :disabled="!auth.canEdit.value" @click="openEdit(row)">수정</AppButton>
           <!-- 연결 상품이 있는 규격은 삭제할 수 없어 미사용 규격에만 삭제 버튼을 둡니다. -->
           <AppButton
-            v-if="row.status === '미사용'"
+            v-if="!row.isActive"
             size="sm"
             variant="danger-outline"
             :disabled="!auth.canEdit.value" @click="deletingSpec = row"
@@ -205,12 +193,12 @@ async function handleStockInSubmit(form) {
       </template>
     </DataTable>
 
-    <div class="box-spec__footnotes">
-      <p class="box-spec__footnote">
-        <span class="box-spec__footnote-star" aria-hidden="true">★</span>
+    <div class="box-management__footnotes">
+      <p class="box-management__footnote">
+        <span class="box-management__footnote-star" aria-hidden="true">★</span>
         우리 물류센터에서 자체 제작한 박스 규격이에요. 표시가 없는 규격은 시중 표준 규격(택배 박스 호수 기준)입니다.
       </p>
-      <p class="box-spec__footnote box-spec__footnote--plain">
+      <p class="box-management__footnote box-management__footnote--plain">
         박스 규격을 수정하면 연결된 상품의 매칭 적합 여부와 비율이 다시 계산됩니다.
       </p>
     </div>
@@ -244,33 +232,6 @@ async function handleStockInSubmit(form) {
 </template>
 
 <style scoped>
-.box-spec__stats {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 20px;
-}
-
-/* 열이 많아 좁은 화면에서는 표 안에서 가로로 스크롤됩니다. */
-.box-spec :deep(.data-table__table) {
-  min-width: 1440px;
-}
-
-.box-spec__filters {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.box-spec__summary {
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .spec-code {
   display: inline-flex;
   align-items: baseline;
@@ -311,21 +272,13 @@ async function handleStockInSubmit(form) {
   line-height: 1;
 }
 
-.cell--empty {
-  color: var(--color-text-muted);
-}
 
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 
-.box-spec__footnotes {
+.box-management__footnotes {
   margin-top: 16px;
 }
 
-.box-spec__footnote {
+.box-management__footnote {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -336,18 +289,13 @@ async function handleStockInSubmit(form) {
   word-break: keep-all;
 }
 
-.box-spec__footnote--plain {
+.box-management__footnote--plain {
   margin-top: 12px;
   color: var(--color-text-muted);
 }
 
-@media (max-width: 1180px) {
-  .box-spec__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
-.box-spec__footnote-star {
+.box-management__footnote-star {
   display: inline-flex;
   align-items: center;
   justify-content: center;

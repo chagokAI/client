@@ -1,55 +1,8 @@
-export const number = (value) => value == null ? '—' : Number(value).toLocaleString('ko-KR')
-export const quantity = (value) => value == null ? '—' : `${number(value)}개`
-export const currency = (value) => value == null ? '—' : `₩${number(value)}`
-export const dimensions = (w, d, h, unit = true) => [w, d, h].some((v) => v == null) ? '—' : `${w} × ${d} × ${h}${unit ? ' mm' : ''}`
-export const date = (value) => value ? (value.length === 10 ? value : localDate(new Date(value))).replaceAll('-', '.') : '—'
-export const time = (value) => value ? new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '기준 시각 없음'
-export function localDate(value = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value)
-}
-export function nextMonth() {
-  const [year, month] = localDate().split('-').map(Number)
-  return `${month === 12 ? year + 1 : year}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}`
-}
-/** 'YYYY-MM' → '2026.11.01 – 11.30' */
-export function monthPeriod(month) {
-  const [year, mon] = month.split('-').map(Number)
-  const mm = String(mon).padStart(2, '0')
-  return `${year}.${mm}.01 – ${mm}.${new Date(Date.UTC(year, mon, 0)).getUTCDate()}`
-}
-export const person = (p) => p ? [p.name, p.jobTitle, p.department].filter(Boolean).join(' · ') : '—'
-export const MATCH = { MATCHED: '매칭 완료', REVIEW: '검토 필요', UNMATCHED: '미매칭' }
-export const STOCK = { SUFFICIENT: '충분', CAUTION: '주의', SHORTAGE: '부족', UNKNOWN: '미확인' }
-export const ORDER = { PENDING: '승인 대기', APPROVED: '승인 완료', IN_TRANSIT: '배송 중', RECEIVED: '입고 완료', REJECTED: '반려' }
-export const JOB = { PENDING: '계산 대기', RUNNING: '계산 중', SUCCEEDED: '계산 완료', FAILED: '계산 실패', PUBLISH_FAILED: '계산 실패', TIMED_OUT: '시간 초과' }
-export function productRow(p) {
-  return { ...p, categoryId: p.category?.id, category: p.category?.name ?? '—',
-    size: dimensions(p.widthMm, p.depthMm, p.heightMm), matchedBox: p.matchedBoxSpec ? `${p.matchedBoxSpec.code} (${p.matchedBoxSpec.name})` : null,
-    fillRate: p.fillRatePct ?? null, status: MATCH[p.matchStatus] ?? '미매칭' }
-}
-export function specRow(b) {
-  return { ...b, sizeName: b.name, dimensions: dimensions(b.innerWidthMm, b.innerDepthMm, b.innerHeightMm),
-    width: b.innerWidthMm, depth: b.innerDepthMm, height: b.innerHeightMm,
-    supplierId: b.supplier?.id ?? '', supplier: b.supplier?.name ?? '미지정',
-    custom: b.isCustom, linkedProducts: b.linkedProductCount, status: b.isActive ? '사용 중' : '미사용' }
-}
-export function inventoryRow(b) {
-  return { ...b, id: b.inventoryId, code: b.boxCode, sizeName: b.boxName,
-    dimensions: dimensions(b.innerWidthMm, b.innerDepthMm, b.innerHeightMm), current: quantity(b.onHandQty), safety: quantity(b.safetyQty),
-    level: b.stockLevelPct, daysLeft: b.daysToStockout == null ? '—' : `${b.daysToStockout}일`, status: STOCK[b.status],
-    supplier: b.supplier?.name ?? '미지정', leadTimeDays: b.supplier?.leadTimeDays ?? null }
-}
-export function notificationRow(n) {
-  const labels = { INVENTORY: '재고', PURCHASE: '발주', AI: 'AI', MATCHING: '매칭' }
-  return { ...n, category: labels[n.category] ?? n.category, detail: n.message, time: time(n.createdAt), tone: n.category === 'INVENTORY' ? 'danger' : 'info' }
-}
-export function orderRow(o) {
-  return { ...o, number: o.poNo, orderedAt: date(o.createdAt), supplier: o.supplierName ?? '미지정',
-    specs: o.boxCodes?.length ? `${o.boxCodes[0]}${o.specCount > 1 ? ` 외 ${o.specCount - 1}개 규격` : ''}` : '—',
-    quantity: quantity(o.totalQty), amount: currency(o.totalAmountKrw), deliveryAt: date(o.deliveryDate), status: ORDER[o.status] ?? o.status }
-}
+// 상세 화면 하나가 통째로 쓰는 화면 모델입니다. 표 행(rows.js)보다 구조가 깊고 화면 구성에 맞춰져 있습니다.
+import { ORDER, currency, date, dimensions, number, person, quantity, time } from './format'
+
 export function orderDetail(o) {
-  return { number: o.poNo, status: ORDER[o.status], currentStepIndex: ({ PENDING: 1, APPROVED: 2, IN_TRANSIT: 3, RECEIVED: 4 })[o.status] ?? 0,
+  return { number: o.poNo, status: o.status, statusLabel: ORDER[o.status], currentStepIndex: ({ PENDING: 1, APPROVED: 2, IN_TRANSIT: 3, RECEIVED: 4 })[o.status] ?? 0,
     caption: o.proposalGeneratedAt ? `제안서 생성 ${time(o.proposalGeneratedAt)}` : '',
     info: [ ['ordered-at', '발주일', date(o.createdAt)], ['supplier', '공급사', o.supplier?.name ?? '미지정'],
       ['delivery-at', '납품 예정일', date(o.deliveryDate)], ['requester', '요청자', person(o.requester)],

@@ -37,7 +37,7 @@ const form = reactive({
   safetyQty: props.spec?.stock?.safetyQty ?? 0,
   targetQty: '',
   kind: props.spec?.custom ? 'custom' : 'standard',
-  inUse: props.spec ? props.spec.status === '사용 중' : true,
+  inUse: props.spec ? props.spec.isActive : true,
   description: props.spec?.description ?? '',
 })
 

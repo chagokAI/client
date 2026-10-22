@@ -32,10 +32,10 @@ function downloadPdf() {
 <template>
   <BaseModal title="발주서 상세" :description="detail.caption" width="760px" @close="emit('close')">
     <template #title-badge>
-      <StatusBadge :label="detail.status" />
+      <StatusBadge :label="detail.statusLabel" />
     </template>
 
-    <StepProgress v-if="detail.status !== '반려'" :steps="purchaseOrderSteps" :current-index="detail.currentStepIndex" />
+    <StepProgress v-if="detail.status !== 'REJECTED'" :steps="purchaseOrderSteps" :current-index="detail.currentStepIndex" />
 
     <dl class="detail-info">
       <div v-for="field in detail.info" :key="field.id" class="detail-info__field">

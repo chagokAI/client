@@ -8,7 +8,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import DateField from '@/components/common/DateField.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import { warehouseApi } from '@/stores/auth'
-import { localDate, quantity } from '@/api/adapters'
+import { localDate, quantity } from '@/api/format'
 import { useRemote } from '@/composables/useRemote'
 const props = defineProps({ spec: { type: Object, required: true }, specs: { type: Array, default: () => [] }, busy: Boolean })
 const emit = defineEmits(['close', 'submit'])
