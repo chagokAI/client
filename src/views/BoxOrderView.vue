@@ -10,7 +10,6 @@ import { warehouseApi } from '@/stores/auth'
 import { JOB, monthPeriod, nextMonth } from '@/api/format'
 import { costComparisons, draftModel, proposalModel } from '@/api/models'
 import { useRemote } from '@/composables/useRemote'
-import { useAgentTask } from '@/composables/useAgentTask'
 
 const router = useRouter()
 
@@ -32,22 +31,6 @@ const toastMessage = ref('')
 
 const proposal = computed(() => proposalModel(latest.value?.result))
 const activeDraft = computed(() => drafts.value.find((draft) => draft.id === activeId.value) ?? null)
-
-// AI 개선 실행: 에이전트가 규격·출고·재고를 분석해 제안서를 만들고, 저장 전에 담당자 승인을 기다린다.
-const agent = useAgentTask({
-  onDone: async () => {
-    drafts.value = []
-    activeId.value = ''
-    await refresh()
-    toastMessage.value = 'AI 개선 제안서를 불러왔습니다.'
-  },
-})
-const agentNotice = computed(() => {
-  if (agent.phase.value === 'running')
-    return `AI가 개선안을 만들고 있어요 · ${agent.step.value} (${agent.toolCount.value}단계)`
-  if (agent.phase.value === 'failed') return `AI 개선 실행 실패 · ${agent.error.value}`
-  return ''
-})
 
 const ACTIVE_JOB = ['PENDING', 'RUNNING']
 const jobRunning = computed(() => ACTIVE_JOB.includes(job.value?.status))
@@ -224,14 +207,8 @@ onBeforeUnmount(() => {
         :job-running="jobRunning"
         :job-failed="jobFailed"
         :job-notice="jobNotice"
-        :agent-running="agent.running.value"
-        :agent-failed="agent.phase.value === 'failed'"
-        :agent-notice="agentNotice"
-        :agent-approval="agent.approval.value"
         @run-job="runJob"
-        @run-agent="agent.start(targetMonth)"
         @apply="applyProposal"
-        @agent-decide="agent.decide"
       />
 
       <PurchaseOrderDraftCard

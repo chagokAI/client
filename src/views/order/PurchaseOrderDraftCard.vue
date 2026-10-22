@@ -127,7 +127,7 @@ const orderColumns = [
 
     <div v-else class="empty-state">
       <p class="empty-state__title">아직 불러온 발주서가 없어요.</p>
-      <p class="empty-state__text">제안서의 [발주서에 반영하기]를 누르면 공급사별 발주서 초안이 만들어져요.</p>
+      <p class="empty-state__text">제안서의 [발주서 생성하기]를 누르면 공급사별 발주서 초안이 만들어져요.</p>
     </div>
 
     <div class="purchase-order__actions">
