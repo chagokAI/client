@@ -4,6 +4,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import BoxSpecDeleteModal from './BoxSpecDeleteModal.vue'
@@ -77,11 +78,16 @@ async function requestDelete() {
 
 <template>
   <div class="box-spec">
+    <PageHeader
+      title="박스 규격 관리"
+      description="물류센터에서 사용하는 택배 상자 규격 정보를 등록하고 관리합니다."
+    >
+      <template #actions>
+        <AppButton variant="primary" :disabled="!auth.canEdit.value" @click="openCreate">+ 규격 추가</AppButton>
+      </template>
+    </PageHeader>
+
     <ApiState :loading="loading" :error="error" @retry="refresh" />
-    <!-- '+ 규격 추가'는 페이지 제목 줄에 붙습니다. 부모 뷰가 만든 자리에 끼워 넣습니다. -->
-    <Teleport defer to="#box-management-actions">
-      <AppButton variant="primary" :disabled="!auth.canEdit.value" @click="openCreate">+ 규격 추가</AppButton>
-    </Teleport>
 
     <div class="box-spec__filters">
       <SearchInput

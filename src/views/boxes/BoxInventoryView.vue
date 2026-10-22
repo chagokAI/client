@@ -4,6 +4,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatCard from '@/components/common/StatCard.vue'
@@ -67,6 +68,11 @@ async function handleStockInSubmit(form) {
 
 <template>
   <div class="box-inventory">
+    <PageHeader
+      title="박스 재고 관리"
+      description="보유 중인 택배 상자 재고를 규격별로 확인하고 관리합니다."
+    />
+
     <ApiState :loading="loading" :error="error" @retry="refresh" />
     <div class="box-inventory__stats">
       <StatCard

@@ -5,6 +5,7 @@ import AppToast from '@/components/common/AppToast.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterChips from '@/components/common/FilterChips.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
@@ -77,6 +78,11 @@ function handleDelete() { return deactivate(deletingProduct.value) }
 
 <template>
   <div class="box-matching">
+    <PageHeader
+      title="물품-박스 매칭 현황"
+      description="상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다."
+    />
+
     <ApiState :loading="loading" :error="error" @retry="refresh" />
     <div class="box-matching__filters">
       <div class="box-matching__search">

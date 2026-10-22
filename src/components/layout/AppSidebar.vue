@@ -8,7 +8,7 @@ import { auth, warehouseApi } from '@/stores/auth'
 import { notificationRow } from '@/api/adapters'
 import { useSidebar } from '@/composables/useSidebar'
 
-const { isCollapsed, isMobileOpen, toggle, openMobile, closeMobile } = useSidebar()
+const { isCollapsed, isMobileOpen, toggle, expand, openMobile, closeMobile } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 
@@ -16,11 +16,55 @@ const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
 
 const navItems = [
-  { to: '/dashboard', label: '대시보드', icon: 'M3 10.5 10 4l7 6.5V16a1 1 0 0 1-1 1h-3.5v-4h-5v4H4a1 1 0 0 1-1-1Z' },
-  { to: '/boxes', label: '박스 관리', icon: 'M10 3 3.5 6.2v7.6L10 17l6.5-3.2V6.2Zm0 0v14M3.5 6.2 10 9.4l6.5-3.2' },
-  { to: '/orders', label: '박스 주문', icon: 'M3.5 4h2l1.6 8.4a1 1 0 0 0 1 .8h6.3a1 1 0 0 0 1-.8L16.8 7H6.3M8 16.5h.01M14 16.5h.01' },
-  { to: '/purchase-orders', label: '발주서 이력', icon: 'M6 3h5l3.5 3.5V16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm4.5 0v4H15M7.5 10.5h5M7.5 13.5h3' },
+  { to: '/dashboard', label: '실시간 센터 현황', icon: 'M3 10.5 10 4l7 6.5V16a1 1 0 0 1-1 1h-3.5v-4h-5v4H4a1 1 0 0 1-1-1Z' },
+  { to: '/boxes/inventory', label: '박스 재고 관리', icon: 'M3 7.5h14M3 7.5v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M3 7.5 5 4h10l2 3.5M8 11h4' },
+  { to: '/boxes/specs', label: '박스 규격 관리', icon: 'M4 5.5h12M4 10h12M4 14.5h7M15 13l1.8 1.8M14 16.5l3-3' },
+  {
+    label: '주문 관리',
+    icon: 'M3.5 4h2l1.6 8.4a1 1 0 0 0 1 .8h6.3a1 1 0 0 0 1-.8L16.8 7H6.3M8 16.5h.01M14 16.5h.01',
+    children: [
+      { to: '/orders', label: '박스 주문' },
+      { to: '/purchase-orders', label: '발주서 이력 관리' },
+    ],
+  },
+  { to: '/boxes/matching', label: '물품-박스 매칭 현황', icon: 'M10 3 3.5 6.2v7.6L10 17l6.5-3.2V6.2Zm0 0v14M3.5 6.2 10 9.4l6.5-3.2' },
 ]
+
+// 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
+const openGroups = ref(navItems.filter(item => item.children).map(item => item.label))
+
+function hasActiveChild(item) {
+  return !!item.children?.some(child => route.path === child.to)
+}
+
+function isGroupOpen(item) {
+  return openGroups.value.includes(item.label)
+}
+
+// 상위 카테고리는 펼치고 접기만 합니다. 이동은 하위 메뉴에서만 일어납니다.
+function toggleGroup(item) {
+  // 아이콘만 남은 드로어에서는 하위 메뉴가 보이도록 드로어부터 펼칩니다.
+  if (isCollapsed.value) {
+    expand()
+    if (!isGroupOpen(item)) openGroups.value = [...openGroups.value, item.label]
+    return
+  }
+
+  openGroups.value = isGroupOpen(item)
+    ? openGroups.value.filter(label => label !== item.label)
+    : [...openGroups.value, item.label]
+}
+
+// 주소로 바로 들어온 경우에도 해당 그룹은 펼쳐 둡니다.
+watch(
+  () => route.path,
+  () => {
+    const labels = navItems.filter(hasActiveChild).map(item => item.label)
+    const added = labels.filter(label => !openGroups.value.includes(label))
+    if (added.length) openGroups.value = [...openGroups.value, ...added]
+  },
+  { immediate: true },
+)
 
 const notifications = ref([])
 const unreadCount = ref(0)
@@ -139,24 +183,59 @@ onBeforeUnmount(() => {
       </div>
 
       <nav class="sidebar__nav" aria-label="주요 메뉴">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          class="sidebar__link"
-          :to="item.to"
-          :title="isCollapsed ? item.label : null"
-        >
-          <svg class="sidebar__icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path
-              :d="item.icon"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <span class="sidebar__label">{{ item.label }}</span>
-        </RouterLink>
+        <template v-for="item in navItems" :key="item.to ?? item.label">
+          <RouterLink
+            v-if="!item.children"
+            class="sidebar__link"
+            :to="item.to"
+            :title="isCollapsed ? item.label : null"
+          >
+            <svg class="sidebar__icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path
+                :d="item.icon"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="sidebar__label">{{ item.label }}</span>
+          </RouterLink>
+
+          <template v-else>
+            <button
+              class="sidebar__link sidebar__link--group"
+              :class="{ 'sidebar__link--has-active': hasActiveChild(item) }"
+              type="button"
+              :aria-expanded="isGroupOpen(item)"
+              :title="isCollapsed ? item.label : null"
+              @click="toggleGroup(item)"
+            >
+              <svg class="sidebar__icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path
+                  :d="item.icon"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span class="sidebar__label">{{ item.label }}</span>
+              <svg class="sidebar__chevron" :class="{ 'sidebar__chevron--open': isGroupOpen(item) }" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="m8 6 4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+
+            <RouterLink
+              v-for="child in (isGroupOpen(item) ? item.children : [])"
+              :key="child.to"
+              class="sidebar__link sidebar__link--child"
+              :to="child.to"
+            >
+              <span class="sidebar__label">{{ child.label }}</span>
+            </RouterLink>
+          </template>
+        </template>
       </nav>
 
       <div class="sidebar__foot">
@@ -364,6 +443,37 @@ onBeforeUnmount(() => {
   display: none;
 }
 
+.sidebar__chevron {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
+.sidebar__chevron--open {
+  transform: rotate(90deg);
+}
+
+.sidebar--collapsed .sidebar__chevron {
+  display: none;
+}
+
+/* 하위 메뉴는 아이콘 자리만큼 들여써서 상위 카테고리와 구분합니다. */
+.sidebar__link--child {
+  padding-left: 42px;
+  font-size: 13px;
+}
+
+/* 접힌 드로어에서는 아이콘만 남으므로 하위 메뉴를 숨깁니다. */
+.sidebar--collapsed .sidebar__link--child {
+  display: none;
+}
+
+.sidebar__link--has-active {
+  color: var(--color-white);
+}
+
 /* 알림·프로필은 메뉴 목록과 구분되도록 드로어 아래쪽에 붙입니다. */
 .sidebar__foot {
   display: flex;
@@ -462,6 +572,15 @@ onBeforeUnmount(() => {
   .sidebar--collapsed .sidebar__action {
     justify-content: flex-start;
     padding: 10px 12px;
+  }
+
+  .sidebar--collapsed .sidebar__chevron {
+    display: block;
+  }
+
+  .sidebar--collapsed .sidebar__link--child {
+    display: flex;
+    padding-left: 42px;
   }
 
   .sidebar__toggle {

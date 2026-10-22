@@ -22,6 +22,7 @@ export function useSidebar() {
     isCollapsed: computed(() => isCollapsed.value),
     isMobileOpen: computed(() => isMobileOpen.value),
     toggle() { isCollapsed.value = !isCollapsed.value; persist() },
+    expand() { if (isCollapsed.value) { isCollapsed.value = false; persist() } },
     openMobile() { isMobileOpen.value = true },
     closeMobile() { isMobileOpen.value = false },
   }

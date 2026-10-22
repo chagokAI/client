@@ -55,7 +55,7 @@ async function openDetail(row) {
   <div class="purchase-order-history">
     <ApiState :loading="loading" :error="error" @retry="refresh" />
     <PageHeader
-      title="발주서 이력"
+      title="발주서 이력 관리"
       description="승인된 발주서와 납품 진행 상태를 한눈에 확인하고 관리합니다."
       :meta="historyPeriod"
     />
