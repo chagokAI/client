@@ -43,7 +43,8 @@ const agent = useAgentTask({
   },
 })
 const agentNotice = computed(() => {
-  if (agent.phase.value === 'running') return `AI가 개선안을 만들고 있어요 · ${agent.step.value} (${agent.toolCount.value}단계)`
+  if (agent.phase.value === 'running')
+    return `AI가 개선안을 만들고 있어요 · ${agent.step.value} (${agent.toolCount.value}단계)`
   if (agent.phase.value === 'failed') return `AI 개선 실행 실패 · ${agent.error.value}`
   return ''
 })

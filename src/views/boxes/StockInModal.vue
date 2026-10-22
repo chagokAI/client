@@ -10,26 +10,51 @@ import ApiState from '@/components/common/ApiState.vue'
 import { warehouseApi } from '@/stores/auth'
 import { localDate, quantity } from '@/api/format'
 import { useRemote } from '@/composables/useRemote'
-const props = defineProps({ spec: { type: Object, required: true }, specs: { type: Array, default: () => [] }, busy: Boolean })
+const props = defineProps({
+  spec: { type: Object, required: true },
+  specs: { type: Array, default: () => [] },
+  busy: Boolean,
+})
 const emit = defineEmits(['close', 'submit'])
-const specOptions = computed(() => props.specs.map(item => ({ value: item.id, label: `${item.code} · ${item.sizeName}` })))
+const specOptions = computed(() =>
+  props.specs.map((item) => ({ value: item.id, label: `${item.code} · ${item.sizeName}` })),
+)
 const orders = ref([])
 const form = reactive({ specId: props.spec.id, orderNumber: '', quantity: 0, receivedAt: localDate(), memo: '' })
 const requestId = crypto.randomUUID()
 const { loading, error, load } = useRemote()
-function refreshOrders() { return load(signal => warehouseApi('/purchase-orders/open', { signal, query: { boxSpecId: form.specId } }), ({ data }) => { orders.value = data }) }
-watch(() => form.specId, () => { form.orderNumber = ''; refreshOrders() }, { immediate: true })
-const openPurchaseOrderOptions = computed(() => [{ value: '', label: '발주서 연결 안 함' }, ...orders.value.map(order => ({ value: order.id, label: order.poNo }))])
-const selectedSpec = computed(() => props.specs.find(item => item.id === form.specId) ?? props.spec)
+function refreshOrders() {
+  return load(
+    (signal) => warehouseApi('/purchase-orders/open', { signal, query: { boxSpecId: form.specId } }),
+    ({ data }) => {
+      orders.value = data
+    },
+  )
+}
+watch(
+  () => form.specId,
+  () => {
+    form.orderNumber = ''
+    refreshOrders()
+  },
+  { immediate: true },
+)
+const openPurchaseOrderOptions = computed(() => [
+  { value: '', label: '발주서 연결 안 함' },
+  ...orders.value.map((order) => ({ value: order.id, label: order.poNo })),
+])
+const selectedSpec = computed(() => props.specs.find((item) => item.id === form.specId) ?? props.spec)
 const currentStock = computed(() => selectedSpec.value.onHandQty)
 const safetyStock = computed(() => selectedSpec.value.safetyQty)
-const nextStock = computed(() => currentStock.value == null ? null : currentStock.value + Number(form.quantity || 0))
+const nextStock = computed(() => (currentStock.value == null ? null : currentStock.value + Number(form.quantity || 0)))
 const orderedQuantityHint = computed(() => {
-  const order = orders.value.find(item => item.id === form.orderNumber)
-  const line = order?.items.find(item => item.boxSpec.id === form.specId)
+  const order = orders.value.find((item) => item.id === form.orderNumber)
+  const line = order?.items.find((item) => item.boxSpec.id === form.specId)
   return line ? `미입고 수량 ${quantity(line.remainingQty)}` : ''
 })
-function format(value) { return quantity(value) }
+function format(value) {
+  return quantity(value)
+}
 function handleSubmit() {
   if (props.busy || loading.value) return
   emit('submit', { ...form, requestId })
@@ -162,7 +187,9 @@ function handleSubmit() {
   font-size: 13px;
   line-height: 1.5;
   resize: vertical;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .stock-in__memo::placeholder {

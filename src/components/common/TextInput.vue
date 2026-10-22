@@ -92,7 +92,9 @@ function handleInput(event) {
   color: var(--color-text);
   font-size: 13px;
   appearance: textfield;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .text-input__control::-webkit-outer-spin-button,

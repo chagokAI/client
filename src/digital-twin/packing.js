@@ -56,7 +56,8 @@ export class Truck {
     for (const b of this.boxes) {
       const [bx, by, bz] = b.pos
       const [sx, sy, sz] = b.size
-      if (x < bx + sx && bx < x + size[0] && y < by + sy && by < y + size[1] && z < bz + sz && bz < z + size[2]) return false
+      if (x < bx + sx && bx < x + size[0] && y < by + sy && by < y + size[1] && z < bz + sz && bz < z + size[2])
+        return false
     }
     if (z === 0) return true
     let support = 0
@@ -75,7 +76,10 @@ export class Truck {
   /** 들어갈 자리를 찾아 놓는다. 바닥 면적이 넓게 눕힌다(높이는 가장 짧은 변). 없으면 null */
   place(dims) {
     const [a, b, c] = [...dims].sort((p, q) => q - p)
-    const orients = [[b, a, c], [a, b, c]]
+    const orients = [
+      [b, a, c],
+      [a, b, c],
+    ]
     const order = [...this.points].sort((p, q) => p[0] - q[0] || p[2] - q[2] || p[1] - q[1])
     for (const pos of order) {
       for (const size of orients) {
@@ -118,9 +122,20 @@ export function simulate(observations, boxes) {
     }
     const { best, candidates } = evaluate(dims, boxes, stock)
     const ev = {
-      eventId: o.eventId, at: o.observedAt, status: o.status, candidates,
-      item: { name: p?.name ?? '처음 보는 물품', code: p?.code, productId: p?.id, dims, source,
-        dl: m ? { status: m.dlStatus, sizeType: m.sizeType, latencyMs: m.latencyMs, failureReason: m.failureReason } : null },
+      eventId: o.eventId,
+      at: o.observedAt,
+      status: o.status,
+      candidates,
+      item: {
+        name: p?.name ?? '처음 보는 물품',
+        code: p?.code,
+        productId: p?.id,
+        dims,
+        source,
+        dl: m
+          ? { status: m.dlStatus, sizeType: m.sizeType, latencyMs: m.latencyMs, failureReason: m.failureReason }
+          : null,
+      },
       box: null,
     }
     if (best) {
@@ -131,9 +146,18 @@ export function simulate(observations, boxes) {
         trucks.push(new Truck(trucks.length + 1))
         spot = trucks.at(-1).place(spec.dims)
       }
-      ev.box = { code: spec.code, name: spec.name, dims: spec.dims, price: spec.price, fill: best.fill,
-        emptyCm3: Math.round((vol(spec.dims) - vol(dims)) / 100) / 10, stockAfter: stock[spec.code],
-        truck: trucks.at(-1).no, pos: spot.pos, size: spot.size }
+      ev.box = {
+        code: spec.code,
+        name: spec.name,
+        dims: spec.dims,
+        price: spec.price,
+        fill: best.fill,
+        emptyCm3: Math.round((vol(spec.dims) - vol(dims)) / 100) / 10,
+        stockAfter: stock[spec.code],
+        truck: trucks.at(-1).no,
+        pos: spot.pos,
+        size: spot.size,
+      }
     } else skipped.noBox += 1
     events.push(ev)
   }

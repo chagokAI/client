@@ -59,7 +59,9 @@ defineEmits(['update:modelValue'])
   color: var(--color-text);
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .select-field__control:focus {

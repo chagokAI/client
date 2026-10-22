@@ -19,7 +19,14 @@ const forecast = computed(() => model.value.forecast)
 const inventorySummary = computed(() => model.value.inventorySummary)
 const costSummary = computed(() => model.value.costSummary)
 const safetyStockAlerts = computed(() => model.value.safetyStockAlerts)
-function refresh() { return load(signal => warehouseApi('/dashboard', { signal }), value => { result.value = value.data }) }
+function refresh() {
+  return load(
+    (signal) => warehouseApi('/dashboard', { signal }),
+    (value) => {
+      result.value = value.data
+    },
+  )
+}
 onMounted(refresh)
 
 const router = useRouter()
@@ -46,7 +53,9 @@ function goToOrder() {
               <h2 class="simulation__title">시뮬레이션</h2>
               <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
             </div>
-            <p class="simulation__description">창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.</p>
+            <p class="simulation__description">
+              창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.
+            </p>
           </div>
         </template>
 

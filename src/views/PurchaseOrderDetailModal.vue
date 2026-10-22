@@ -35,7 +35,11 @@ function downloadPdf() {
       <StatusBadge :label="detail.statusLabel" />
     </template>
 
-    <StepProgress v-if="detail.status !== 'REJECTED'" :steps="purchaseOrderSteps" :current-index="detail.currentStepIndex" />
+    <StepProgress
+      v-if="detail.status !== 'REJECTED'"
+      :steps="purchaseOrderSteps"
+      :current-index="detail.currentStepIndex"
+    />
 
     <dl class="detail-info">
       <div v-for="field in detail.info" :key="field.id" class="detail-info__field">

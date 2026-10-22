@@ -31,7 +31,13 @@ onBeforeUnmount(() => {
   <div class="app-toast" role="status">
     <svg class="app-toast__icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <circle cx="10" cy="10" r="10" fill="#2f9e5e" />
-      <path d="m6 10.2 2.6 2.6L14 7.4" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      <path
+        d="m6 10.2 2.6 2.6L14 7.4"
+        stroke="#ffffff"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
     <p class="app-toast__message">{{ message }}</p>
   </div>

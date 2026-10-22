@@ -18,13 +18,19 @@ export function useListQuery(filters, fetcher, accept) {
   const totalPages = ref(0)
 
   function refresh() {
-    return load(signal => fetcher(signal, page.value - 1), (response) => {
-      if (response == null) return
-      totalPages.value = accept(response) ?? 0
-    })
+    return load(
+      (signal) => fetcher(signal, page.value - 1),
+      (response) => {
+        if (response == null) return
+        totalPages.value = accept(response) ?? 0
+      },
+    )
   }
 
-  watch(filters, () => { if (page.value !== 1) page.value = 1; else refresh() })
+  watch(filters, () => {
+    if (page.value !== 1) page.value = 1
+    else refresh()
+  })
   watch(page, refresh)
   onMounted(refresh)
 

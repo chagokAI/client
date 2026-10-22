@@ -28,7 +28,10 @@ const routes = [
     path: '/boxes/specs',
     name: 'box-management',
     component: () => import('@/views/boxes/BoxManagementView.vue'),
-    meta: { title: '박스 재고/규격 관리', description: '택배 상자 규격 정보와 규격별 재고를 함께 확인하고 관리합니다.' },
+    meta: {
+      title: '박스 재고/규격 관리',
+      description: '택배 상자 규격 정보와 규격별 재고를 함께 확인하고 관리합니다.',
+    },
   },
   {
     path: '/orders',

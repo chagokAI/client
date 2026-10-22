@@ -58,7 +58,9 @@ defineEmits(['update:modelValue'])
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .filter-chips__chip:hover:not(.filter-chips__chip--active) {

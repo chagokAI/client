@@ -16,8 +16,16 @@ const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
 
 const navItems = [
-  { to: '/dashboard', label: '실시간 센터 현황', icon: 'M3 10.5 10 4l7 6.5V16a1 1 0 0 1-1 1h-3.5v-4h-5v4H4a1 1 0 0 1-1-1Z' },
-  { to: '/boxes/specs', label: '박스 재고/규격 관리', icon: 'M3 7.5h14M3 7.5v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M3 7.5 5 4h10l2 3.5M8 11h4' },
+  {
+    to: '/dashboard',
+    label: '실시간 센터 현황',
+    icon: 'M3 10.5 10 4l7 6.5V16a1 1 0 0 1-1 1h-3.5v-4h-5v4H4a1 1 0 0 1-1-1Z',
+  },
+  {
+    to: '/boxes/specs',
+    label: '박스 재고/규격 관리',
+    icon: 'M3 7.5h14M3 7.5v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M3 7.5 5 4h10l2 3.5M8 11h4',
+  },
   {
     label: '주문 관리',
     icon: 'M3.5 4h2l1.6 8.4a1 1 0 0 0 1 .8h6.3a1 1 0 0 0 1-.8L16.8 7H6.3M8 16.5h.01M14 16.5h.01',
@@ -26,14 +34,18 @@ const navItems = [
       { to: '/purchase-orders', label: '발주서 이력 관리' },
     ],
   },
-  { to: '/boxes/matching', label: '물품-박스 매칭 현황', icon: 'M4 5.5h.01M4 10h.01M4 14.5h.01M7.5 5.5H17M7.5 10H17M7.5 14.5H17' },
+  {
+    to: '/boxes/matching',
+    label: '물품-박스 매칭 현황',
+    icon: 'M4 5.5h.01M4 10h.01M4 14.5h.01M7.5 5.5H17M7.5 10H17M7.5 14.5H17',
+  },
 ]
 
 // 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
-const openGroups = ref(navItems.filter(item => item.children).map(item => item.label))
+const openGroups = ref(navItems.filter((item) => item.children).map((item) => item.label))
 
 function hasActiveChild(item) {
-  return !!item.children?.some(child => route.path === child.to)
+  return !!item.children?.some((child) => route.path === child.to)
 }
 
 function isGroupOpen(item) {
@@ -50,7 +62,7 @@ function toggleGroup(item) {
   }
 
   openGroups.value = isGroupOpen(item)
-    ? openGroups.value.filter(label => label !== item.label)
+    ? openGroups.value.filter((label) => label !== item.label)
     : [...openGroups.value, item.label]
 }
 
@@ -58,8 +70,8 @@ function toggleGroup(item) {
 watch(
   () => route.path,
   () => {
-    const labels = navItems.filter(hasActiveChild).map(item => item.label)
-    const added = labels.filter(label => !openGroups.value.includes(label))
+    const labels = navItems.filter(hasActiveChild).map((item) => item.label)
+    const added = labels.filter((label) => !openGroups.value.includes(label))
     if (added.length) openGroups.value = [...openGroups.value, ...added]
   },
   { immediate: true },
@@ -76,8 +88,11 @@ const profileArea = useTemplateRef('profileArea')
 async function loadNotifications() {
   try {
     const { data } = await warehouseApi('/notifications', { query: { size: 20 } })
-    notifications.value = data.items.map(notificationRow); unreadCount.value = data.unreadCount
-  } catch (error) { toastMessage.value = error.message }
+    notifications.value = data.items.map(notificationRow)
+    unreadCount.value = data.unreadCount
+  } catch (error) {
+    toastMessage.value = error.message
+  }
 }
 
 function markAllAsRead() {
@@ -120,8 +135,12 @@ function handleProfileSelect() {
 }
 
 async function handleLogout() {
-  try { await auth.logout(); await router.replace('/login') }
-  catch (error) { toastMessage.value = error.message }
+  try {
+    await auth.logout()
+    await router.replace('/login')
+  } catch (error) {
+    toastMessage.value = error.message
+  }
   isProfileOpen.value = false
 }
 
@@ -146,7 +165,13 @@ onBeforeUnmount(() => {
 
     <button class="sidebar__fab" type="button" aria-label="메뉴 열기" @click="openMobile">
       <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M4 10h11m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path
+          d="M4 10h11m-4-4 4 4-4 4"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
       </svg>
     </button>
 
@@ -220,13 +245,25 @@ onBeforeUnmount(() => {
                 />
               </svg>
               <span class="sidebar__label">{{ item.label }}</span>
-              <svg class="sidebar__chevron" :class="{ 'sidebar__chevron--open': isGroupOpen(item) }" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="m8 6 4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              <svg
+                class="sidebar__chevron"
+                :class="{ 'sidebar__chevron--open': isGroupOpen(item) }"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="m8 6 4 4-4 4"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
 
             <RouterLink
-              v-for="child in (isGroupOpen(item) ? item.children : [])"
+              v-for="child in isGroupOpen(item) ? item.children : []"
               :key="child.to"
               class="sidebar__link sidebar__link--child"
               :to="child.to"
@@ -286,11 +323,7 @@ onBeforeUnmount(() => {
           </button>
 
           <div v-if="isProfileOpen" class="sidebar__panel">
-            <ProfileMenu
-              :center-id="centerId"
-              @select="handleProfileSelect"
-              @logout="handleLogout"
-            />
+            <ProfileMenu :center-id="centerId" @select="handleProfileSelect" @logout="handleLogout" />
           </div>
         </div>
       </div>
@@ -371,7 +404,9 @@ onBeforeUnmount(() => {
   background: transparent;
   color: #c7ccd4;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .sidebar__toggle:hover {
@@ -411,7 +446,9 @@ onBeforeUnmount(() => {
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .sidebar--collapsed .sidebar__link,

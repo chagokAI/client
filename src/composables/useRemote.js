@@ -10,14 +10,20 @@ export function useRemote() {
     const current = ++sequence
     controller?.abort()
     controller = new AbortController()
-    loading.value = true; error.value = ''
+    loading.value = true
+    error.value = ''
     try {
       const value = await fetcher(controller.signal)
       if (current === sequence) accept(value)
     } catch (cause) {
       if (current === sequence && cause.name !== 'AbortError') error.value = cause.message
-    } finally { if (current === sequence) loading.value = false }
+    } finally {
+      if (current === sequence) loading.value = false
+    }
   }
-  onBeforeUnmount(() => { sequence++; controller?.abort() })
+  onBeforeUnmount(() => {
+    sequence++
+    controller?.abort()
+  })
   return { loading, error, load }
 }

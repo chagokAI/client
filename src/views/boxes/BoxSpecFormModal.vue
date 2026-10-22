@@ -3,8 +3,16 @@ import { computed, reactive } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SelectField from '@/components/common/SelectField.vue'
-const materialOptions = ['골판지 B골', '골판지 A골', '골판지 AB골', '이중 골판지'].map(value => ({ value, label: value }))
-const sizeOptions = [{ value: 'S', label: '소형 (S)' }, { value: 'M', label: '중형 (M)' }, { value: 'L', label: '대형 (L)' }, { value: 'O', label: '기타' }]
+const materialOptions = ['골판지 B골', '골판지 A골', '골판지 AB골', '이중 골판지'].map((value) => ({
+  value,
+  label: value,
+}))
+const sizeOptions = [
+  { value: 'S', label: '소형 (S)' },
+  { value: 'M', label: '중형 (M)' },
+  { value: 'L', label: '대형 (L)' },
+  { value: 'O', label: '기타' },
+]
 
 const props = defineProps({
   suppliers: { type: Array, default: () => [] },
@@ -16,7 +24,9 @@ const props = defineProps({
   },
 })
 
-const editableSuppliers = computed(() => props.spec?.supplierId ? props.suppliers.filter(s => s.value) : props.suppliers)
+const editableSuppliers = computed(() =>
+  props.spec?.supplierId ? props.suppliers.filter((s) => s.value) : props.suppliers,
+)
 
 const emit = defineEmits(['close', 'save'])
 
@@ -50,7 +60,11 @@ function handleSave() {
 <template>
   <BaseModal
     :title="isEditing ? '박스 규격 수정' : '박스 규격 등록'"
-    :description="isEditing ? `${spec.code} · ${spec.sizeName} · 연결 상품 ${spec.linkedProducts}개` : '새 박스 규격 정보를 입력하세요.'"
+    :description="
+      isEditing
+        ? `${spec.code} · ${spec.sizeName} · 연결 상품 ${spec.linkedProducts}개`
+        : '새 박스 규격 정보를 입력하세요.'
+    "
     width="600px"
     @close="emit('close')"
   >
@@ -129,17 +143,74 @@ function handleSave() {
       </div>
 
       <div class="spec-form__row">
-        <div class="field"><label class="field__label" for="spec-price">단가 (원)</label><input id="spec-price" v-model.number="form.unitPriceKrw" class="field__input" type="number" min="0" step="1" required /></div>
-        <div class="field"><span class="field__label">크기 분류</span><SelectField v-model="form.sizeClass" :options="sizeOptions" width="100%" aria-label="크기 분류" /></div>
+        <div class="field">
+          <label class="field__label" for="spec-price">단가 (원)</label
+          ><input
+            id="spec-price"
+            v-model.number="form.unitPriceKrw"
+            class="field__input"
+            type="number"
+            min="0"
+            step="1"
+            required
+          />
+        </div>
+        <div class="field">
+          <span class="field__label">크기 분류</span
+          ><SelectField v-model="form.sizeClass" :options="sizeOptions" width="100%" aria-label="크기 분류" />
+        </div>
       </div>
       <div v-if="isEditing && spec.stock" class="spec-form__row">
-        <div class="field"><label class="field__label" for="spec-safety-edit">안전 재고 (개)</label><input id="spec-safety-edit" v-model.number="form.safetyQty" class="field__input" type="number" min="0" step="1" /></div>
-        <div class="field"><span class="field__label">현재 재고</span><p class="field__readonly">{{ spec.stock.current }}</p></div>
+        <div class="field">
+          <label class="field__label" for="spec-safety-edit">안전 재고 (개)</label
+          ><input
+            id="spec-safety-edit"
+            v-model.number="form.safetyQty"
+            class="field__input"
+            type="number"
+            min="0"
+            step="1"
+          />
+        </div>
+        <div class="field">
+          <span class="field__label">현재 재고</span>
+          <p class="field__readonly">{{ spec.stock.current }}</p>
+        </div>
       </div>
       <div v-if="!isEditing" class="spec-form__row">
-        <div class="field"><label class="field__label" for="spec-stock">초기 재고 (개)</label><input id="spec-stock" v-model.number="form.initialOnHandQty" class="field__input" type="number" min="0" step="1" /></div>
-        <div class="field"><label class="field__label" for="spec-safety">안전 재고 (개)</label><input id="spec-safety" v-model.number="form.safetyQty" class="field__input" type="number" min="0" step="1" /></div>
-        <div class="field"><label class="field__label" for="spec-target">목표 재고 (개, 선택)</label><input id="spec-target" v-model.number="form.targetQty" class="field__input" type="number" min="0" step="1" /></div>
+        <div class="field">
+          <label class="field__label" for="spec-stock">초기 재고 (개)</label
+          ><input
+            id="spec-stock"
+            v-model.number="form.initialOnHandQty"
+            class="field__input"
+            type="number"
+            min="0"
+            step="1"
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="spec-safety">안전 재고 (개)</label
+          ><input
+            id="spec-safety"
+            v-model.number="form.safetyQty"
+            class="field__input"
+            type="number"
+            min="0"
+            step="1"
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="spec-target">목표 재고 (개, 선택)</label
+          ><input
+            id="spec-target"
+            v-model.number="form.targetQty"
+            class="field__input"
+            type="number"
+            min="0"
+            step="1"
+          />
+        </div>
       </div>
 
       <div class="field">
@@ -215,7 +286,9 @@ function handleSave() {
   background: var(--color-white);
   color: var(--color-text);
   font-size: 13px;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .field__input,

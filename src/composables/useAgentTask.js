@@ -4,13 +4,27 @@ import { auth, warehouseApi } from '@/stores/auth'
 
 // 에이전트가 부르는 도구 → 진행 표시 문구
 const TOOL_LABELS = {
-  list_past_proposals: '지난 제안 확인', list_box_specs: '박스 규격 확인', list_product_fits: '상품·출고 이력 수집',
-  get_box_inventory: '재고 확인', get_shipment_history: '월별 출고 수집', list_purchase_orders: '발주 이력 확인',
-  forecast_shipments: '수요 예측', analyze_fill_rate: '충진율 분석', diagnose_inefficiency: '비효율 원인 분석',
-  find_misfit_clusters: '애매한 치수 구간 찾기', ideal_box_dims: '이상 치수 계산', search_catalog: '기성품 박스 검색',
-  coverage: '후보 박스 적합도 계산', simulate_boxset: '신규 규격 도입 효과 계산', plan_order: '주문 수량 계산',
-  get_template: '제안서 양식 불러오기', search_policies: '사내 규정 검색', search_feedback_cases: '과거 반려 기록 검색',
-  read_resource: '규정 원문 확인', render_proposal: '제안서 작성', save_proposal: '제안서 저장',
+  list_past_proposals: '지난 제안 확인',
+  list_box_specs: '박스 규격 확인',
+  list_product_fits: '상품·출고 이력 수집',
+  get_box_inventory: '재고 확인',
+  get_shipment_history: '월별 출고 수집',
+  list_purchase_orders: '발주 이력 확인',
+  forecast_shipments: '수요 예측',
+  analyze_fill_rate: '충진율 분석',
+  diagnose_inefficiency: '비효율 원인 분석',
+  find_misfit_clusters: '애매한 치수 구간 찾기',
+  ideal_box_dims: '이상 치수 계산',
+  search_catalog: '기성품 박스 검색',
+  coverage: '후보 박스 적합도 계산',
+  simulate_boxset: '신규 규격 도입 효과 계산',
+  plan_order: '주문 수량 계산',
+  get_template: '제안서 양식 불러오기',
+  search_policies: '사내 규정 검색',
+  search_feedback_cases: '과거 반려 기록 검색',
+  read_resource: '규정 원문 확인',
+  render_proposal: '제안서 작성',
+  save_proposal: '제안서 저장',
   add_feedback_case: '반려 기록 저장',
 }
 
@@ -36,7 +50,9 @@ export function useAgentTask({ onDone } = {}) {
 
   function listen(id) {
     close()
-    source = new EventSource(apiUrl(`/warehouses/${auth.warehouseId.value}/ai-tasks/${id}/stream`), { withCredentials: true })
+    source = new EventSource(apiUrl(`/warehouses/${auth.warehouseId.value}/ai-tasks/${id}/stream`), {
+      withCredentials: true,
+    })
     const data = (event) => JSON.parse(event.data || '{}')
     source.addEventListener('TOOL_START', (event) => {
       const { tool } = data(event)
@@ -64,14 +80,22 @@ export function useAgentTask({ onDone } = {}) {
       if (!source || source.readyState !== EventSource.CLOSED) return
       try {
         const { data: latest } = await warehouseApi(`/ai-tasks/${id}`)
-        if (latest.status === 'FAILED') { phase.value = 'failed'; error.value = latest.failureMessage ?? '' }
-      } catch { /* 다음 조회에서 다시 확인 */ }
+        if (latest.status === 'FAILED') {
+          phase.value = 'failed'
+          error.value = latest.failureMessage ?? ''
+        }
+      } catch {
+        /* 다음 조회에서 다시 확인 */
+      }
     }
   }
 
   async function start(targetMonth) {
     if (running.value) return
-    error.value = ''; approval.value = null; step.value = '작업 접수'; toolCount.value = 0
+    error.value = ''
+    approval.value = null
+    step.value = '작업 접수'
+    toolCount.value = 0
     phase.value = 'running'
     try {
       const { data } = await warehouseApi('/ai-tasks', { method: 'POST', body: { targetMonth } })

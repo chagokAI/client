@@ -76,7 +76,9 @@ const weekday = computed(() => {
   color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .date-field__control:focus {

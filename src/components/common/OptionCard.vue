@@ -82,7 +82,9 @@ defineEmits(['update:modelValue'])
   border-radius: var(--radius-md);
   background: var(--color-white);
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
 }
 
 .option-card:hover {

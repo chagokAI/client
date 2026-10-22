@@ -25,9 +25,7 @@ function decide(decision) {
     <h3 class="agent-approval__title">AI 개선 제안서 승인 요청</h3>
     <p class="agent-approval__summary">
       총 {{ approval.qty?.toLocaleString() }}개 · {{ currency(approval.totalAmount) }}
-      <template v-if="approval.newSpecs?.length">
-        · 신규 규격 {{ approval.newSpecs.join(', ') }}
-      </template>
+      <template v-if="approval.newSpecs?.length"> · 신규 규격 {{ approval.newSpecs.join(', ') }} </template>
       · 자체 검토 {{ approval.score }}점
     </p>
 

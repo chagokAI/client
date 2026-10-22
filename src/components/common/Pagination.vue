@@ -105,7 +105,9 @@ function goTo(page) {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .pagination__page:hover:not(.pagination__page--active),

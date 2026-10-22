@@ -55,12 +55,7 @@ const effectColumns = [
       <AppButton size="sm" :disabled="!auth.canEdit.value || busy || jobRunning" @click="emit('run-job')">
         {{ jobRunning ? '계산 중…' : proposal ? '다시 계산' : '계산 실행' }}
       </AppButton>
-      <AppButton
-        size="sm"
-        variant="primary"
-        :disabled="!auth.canEdit.value || agentRunning"
-        @click="emit('run-agent')"
-      >
+      <AppButton size="sm" variant="primary" :disabled="!auth.canEdit.value || agentRunning" @click="emit('run-agent')">
         {{ agentRunning ? 'AI 실행 중…' : '개선 실행' }}
       </AppButton>
     </template>
@@ -85,7 +80,13 @@ const effectColumns = [
         <p class="proposal__headline-sub">{{ proposal.subline }}</p>
       </div>
 
-      <DataTable class="proposal__table" :columns="proposalColumns" :rows="proposal.rows" row-key="id" min-width="480px">
+      <DataTable
+        class="proposal__table"
+        :columns="proposalColumns"
+        :rows="proposal.rows"
+        row-key="id"
+        min-width="480px"
+      >
         <template #cell-code="{ row }">
           <strong>{{ row.code }}</strong>
         </template>
@@ -140,8 +141,8 @@ const effectColumns = [
     <div v-else-if="loaded" class="empty-state">
       <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
       <p class="empty-state__text">
-        [계산 실행]을 누르면 최근 관측 이력으로 참고 제안서를 만들어요.
-        활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요.
+        [계산 실행]을 누르면 최근 관측 이력으로 참고 제안서를 만들어요. 활성 규격과 현재 재고·안전 재고·단가가 등록되어
+        있어야 계산할 수 있어요.
       </p>
     </div>
   </AppCard>

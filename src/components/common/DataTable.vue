@@ -39,12 +39,7 @@ defineProps({
 
       <thead>
         <tr>
-          <th
-            v-for="column in columns"
-            :key="column.key"
-            scope="col"
-            :style="{ textAlign: column.align || 'left' }"
-          >
+          <th v-for="column in columns" :key="column.key" scope="col" :style="{ textAlign: column.align || 'left' }">
             {{ column.label }}
           </th>
         </tr>
@@ -61,11 +56,7 @@ defineProps({
           :key="row[rowKey] ?? rowIndex"
           :class="{ 'data-table__row--highlight': row.highlight }"
         >
-          <td
-            v-for="column in columns"
-            :key="column.key"
-            :style="{ textAlign: column.align || 'left' }"
-          >
+          <td v-for="column in columns" :key="column.key" :style="{ textAlign: column.align || 'left' }">
             <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :index="rowIndex">
               {{ row[column.key] }}
             </slot>

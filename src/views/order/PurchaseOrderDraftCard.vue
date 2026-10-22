@@ -73,18 +73,19 @@ const orderColumns = [
         <div v-for="field in activeDraft.info" :key="field.id" class="order-info__field">
           <dt :id="`order-info-${field.id}`">{{ field.label }}</dt>
           <dd v-if="field.id === 'due-date' && editable" class="order-info__value--editable">
-            <DateField
-              v-model="activeDraft.deliveryDate"
-              :min="today"
-              show-weekday
-              :aria-label="field.label"
-            />
+            <DateField v-model="activeDraft.deliveryDate" :min="today" show-weekday :aria-label="field.label" />
           </dd>
           <dd v-else>{{ field.value }}</dd>
         </div>
       </dl>
 
-      <DataTable class="purchase-order__table" :columns="orderColumns" :rows="activeDraft.items" row-key="id" min-width="520px">
+      <DataTable
+        class="purchase-order__table"
+        :columns="orderColumns"
+        :rows="activeDraft.items"
+        row-key="id"
+        min-width="520px"
+      >
         <template #cell-code="{ row }">
           <strong>{{ row.code }}</strong>
         </template>
@@ -117,7 +118,9 @@ const orderColumns = [
           제안서 수량이 자동으로 입력되었습니다. −/+ 버튼으로 100개 단위로 수정하면 총 수량과 합계가 바로 바뀝니다.
           수량을 0으로 두면 해당 규격은 발주에서 빠집니다.
         </template>
-        <template v-else-if="activeDraft.status !== 'PENDING'">이미 처리된 발주서예요. 진행 상태는 발주서 이력에서 확인할 수 있어요.</template>
+        <template v-else-if="activeDraft.status !== 'PENDING'"
+          >이미 처리된 발주서예요. 진행 상태는 발주서 이력에서 확인할 수 있어요.</template
+        >
         <template v-else>발주서 수정과 승인은 운영자 이상 권한으로 할 수 있어요.</template>
       </p>
     </template>
