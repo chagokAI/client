@@ -256,6 +256,31 @@ async function handleStockInSubmit(form) {
   min-width: 1440px;
 }
 
+/* 스크롤바도 표 테두리·머리글과 같은 베이지 계열로 맞춥니다. */
+.box-spec :deep(.data-table) {
+  scrollbar-color: var(--color-border) var(--color-cream);
+  scrollbar-width: thin;
+}
+
+.box-spec :deep(.data-table)::-webkit-scrollbar {
+  height: 10px;
+}
+
+.box-spec :deep(.data-table)::-webkit-scrollbar-track {
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-cream);
+}
+
+.box-spec :deep(.data-table)::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-cream);
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.box-spec :deep(.data-table)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
 .box-spec__filters {
   display: flex;
   align-items: center;
