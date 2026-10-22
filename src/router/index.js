@@ -17,7 +17,7 @@ const routes = [
     component: () => import('@/views/DashboardView.vue'),
     meta: { title: '실시간 센터 현황' },
   },
-  { path: '/boxes', redirect: '/boxes/matching' },
+  { path: '/boxes', redirect: '/boxes/specs' },
   {
     path: '/boxes/matching',
     name: 'box-matching',
@@ -25,16 +25,10 @@ const routes = [
     meta: { title: '물품-박스 매칭 현황', description: '상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다.' },
   },
   {
-    path: '/boxes/inventory',
-    name: 'box-inventory',
-    component: () => import('@/views/boxes/BoxInventoryView.vue'),
-    meta: { title: '박스 재고 관리', description: '보유 중인 택배 상자 재고를 규격별로 확인하고 관리합니다.' },
-  },
-  {
     path: '/boxes/specs',
     name: 'box-specs',
     component: () => import('@/views/boxes/BoxSpecView.vue'),
-    meta: { title: '박스 규격 관리', description: '물류센터에서 사용하는 택배 상자 규격 정보를 등록하고 관리합니다.' },
+    meta: { title: '박스 재고/규격 관리', description: '택배 상자 규격 정보와 규격별 재고를 함께 확인하고 관리합니다.' },
   },
   {
     path: '/orders',

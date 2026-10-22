@@ -17,8 +17,7 @@ const centerId = computed(() => auth.warehouseId.value ?? '')
 
 const navItems = [
   { to: '/dashboard', label: '실시간 센터 현황', icon: 'M3 10.5 10 4l7 6.5V16a1 1 0 0 1-1 1h-3.5v-4h-5v4H4a1 1 0 0 1-1-1Z' },
-  { to: '/boxes/inventory', label: '박스 재고 관리', icon: 'M3 7.5h14M3 7.5v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M3 7.5 5 4h10l2 3.5M8 11h4' },
-  { to: '/boxes/specs', label: '박스 규격 관리', icon: 'M4 5.5h12M4 10h12M4 14.5h7M15 13l1.8 1.8M14 16.5l3-3' },
+  { to: '/boxes/specs', label: '박스 재고/규격 관리', icon: 'M3 7.5h14M3 7.5v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M3 7.5 5 4h10l2 3.5M8 11h4' },
   {
     label: '주문 관리',
     icon: 'M3.5 4h2l1.6 8.4a1 1 0 0 0 1 .8h6.3a1 1 0 0 0 1-.8L16.8 7H6.3M8 16.5h.01M14 16.5h.01',
