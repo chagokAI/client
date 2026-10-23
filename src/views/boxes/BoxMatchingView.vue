@@ -15,7 +15,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProductDeleteModal from './ProductDeleteModal.vue'
 import ProductEditModal from './ProductEditModal.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { MATCH } from '@/api/format'
+import { MATCH, fillTone } from '@/api/format'
 import { productRow } from '@/api/rows'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSaveAction } from '@/composables/useSaveAction'
@@ -40,7 +40,7 @@ const matchSortOptions = [
   { value: 'fill-asc', label: '포장공간비율 낮은 순' },
   { value: 'name', label: '상품명 순' },
 ]
-const productCategories = computed(() => [{ value: 'all', label: '카테고리: 전체' }, ...categories.value])
+const productCategories = computed(() => [{ value: 'all', label: '전체' }, ...categories.value])
 const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
   ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
@@ -66,6 +66,7 @@ const { loading, error, page, totalPages, refresh } = useListQuery(
         categoryId: category.value === 'all' ? undefined : category.value,
         status: statusFilter.value === 'all' ? undefined : statusFilter.value,
         page,
+        size: 10,
         sort: { 'fill-desc': 'fillRatePct,desc', 'fill-asc': 'fillRatePct,asc', name: 'name,asc' }[sort.value],
       },
     }),
@@ -83,9 +84,6 @@ onMounted(async () => {
     toastMessage.value = cause.message
   }
 })
-function fillTone(value) {
-  return value >= 85 ? 'info' : 'warning'
-}
 async function openEdit(row) {
   try {
     const { data } = await warehouseApi(`/products/${row.id}`)
@@ -110,7 +108,6 @@ function handleSave(form) {
         heightMm: dimensions[2],
         weightG: form.weight === '' ? undefined : Number(form.weight),
         boxSpecId: form.matchedBoxId || undefined,
-        matchOverrideReason: form.manualReason || undefined,
       },
     })
     editingProduct.value = null
@@ -139,6 +136,8 @@ function handleDelete() {
 
     <ApiState :error="error" @retry="refresh" />
     <FilterBar>
+      <SelectField v-model="category" :options="productCategories" width="170px" label="카테고리" />
+
       <div class="box-matching__search">
         <SelectField v-model="searchField" :options="productSearchFields" width="110px" aria-label="검색 기준" />
         <SearchInput
@@ -149,17 +148,16 @@ function handleDelete() {
         />
       </div>
 
-      <SelectField v-model="category" :options="productCategories" width="170px" aria-label="카테고리" />
-
-      <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="매칭 상태" />
-
-      <SelectField
-        v-model="sort"
-        class="box-matching__sort"
-        :options="matchSortOptions"
-        width="180px"
-        aria-label="정렬 기준"
-      />
+      <template #second>
+        <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="매칭 상태" />
+        <SelectField
+          v-model="sort"
+          class="box-matching__sort"
+          :options="matchSortOptions"
+          width="180px"
+          aria-label="정렬 기준"
+        />
+      </template>
     </FilterBar>
 
     <DataTable

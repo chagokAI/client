@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { reactive } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import FormField from '@/components/common/FormField.vue'
@@ -8,6 +8,7 @@ import OptionCard from '@/components/common/OptionCard.vue'
 import SelectField from '@/components/common/SelectField.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import { fillTone } from '@/api/format'
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
@@ -20,14 +21,15 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'deactivate'])
 
-const candidates = (props.product.matchCandidates ?? []).map((c) => ({
-  id: c.boxSpec.id,
-  label: `${c.boxSpec.code} · ${c.boxSpec.name}`,
-  dimensions: `${c.boxSpec.innerWidthMm} × ${c.boxSpec.innerDepthMm} × ${c.boxSpec.innerHeightMm} mm`,
-  fillRate: c.fillRatePct,
-  source: c.recommended ? 'dimensions' : '',
-  note: '',
-}))
+// 매칭 상자는 고르지 않고, 추천된 상자 한 개만 보여 줍니다.
+const recommendation = (props.product.matchCandidates ?? [])
+  .filter((c) => c.recommended)
+  .map((c) => ({
+    id: c.boxSpec.id,
+    label: `${c.boxSpec.code} · ${c.boxSpec.name}`,
+    dimensions: `${c.boxSpec.innerWidthMm} × ${c.boxSpec.innerDepthMm} × ${c.boxSpec.innerHeightMm} mm`,
+    fillRate: c.fillRatePct,
+  }))[0]
 const categoryOptions = props.categories
 
 const form = reactive({
@@ -37,29 +39,11 @@ const form = reactive({
   width: props.product.widthMm ?? '',
   depth: props.product.depthMm ?? '',
   height: props.product.heightMm ?? '',
-  matchedBoxId: props.product.matchedBoxSpec?.id ?? '',
-  manualReason: props.product.matchOverrideReason ?? '',
+  matchedBoxId: recommendation?.id ?? props.product.matchedBoxSpec?.id ?? '',
 })
-
-// 기존 매칭을 바꾸면 사유를 남깁니다.
-const isManualPick = computed(() => form.matchedBoxId && form.matchedBoxId !== props.product.matchedBoxSpec?.id)
-
-function badgeOf(candidate) {
-  if (candidate.source === 'dimensions') return { label: '치수 추천', tone: 'gold' }
-  if (candidate.id === form.matchedBoxId) return { label: '직접 지정', tone: 'info' }
-  return { label: '', tone: 'neutral' }
-}
-
-// 포장공간비율은 85% 이상 정상 · 70% 이상 주의 · 그 아래 부적합
-function rateTone(value) {
-  if (value >= 85) return 'info'
-  if (value >= 70) return 'warning'
-  return 'danger'
-}
 
 function handleSave() {
   if (props.busy) return
-  if (isManualPick.value && !form.manualReason.trim()) return
   emit('save', { ...form })
 }
 </script>
@@ -116,37 +100,24 @@ function handleSave() {
         </div>
       </FormField>
 
-      <section class="product-edit__matching">
+      <section v-if="recommendation" class="product-edit__matching">
         <header class="product-edit__matching-head">
           <h3 class="product-edit__matching-title">매칭 택배 상자</h3>
-          <span class="product-edit__matching-sort">포장공간비율 높은 순</span>
         </header>
 
-        <div class="product-edit__candidates">
-          <OptionCard
-            v-for="candidate in candidates"
-            :key="candidate.id"
-            v-model="form.matchedBoxId"
-            name="matched-box"
-            :value="candidate.id"
-            :title="candidate.label"
-            :subtitle="candidate.note ? `${candidate.dimensions} · ${candidate.note}` : candidate.dimensions"
-            :badge="badgeOf(candidate).label"
-            :badge-tone="badgeOf(candidate).tone"
-            :rate="candidate.fillRate"
-            :rate-tone="rateTone(candidate.fillRate)"
-          />
-        </div>
-      </section>
-
-      <FormField v-if="isManualPick" v-slot="{ fieldId }" label="직접 지정 사유" required>
-        <TextInput
-          :id="fieldId"
-          v-model="form.manualReason"
-          placeholder="이 상자를 직접 지정하는 이유를 적어주세요"
-          aria-label="직접 지정 사유"
+        <OptionCard
+          readonly
+          name="matched-box"
+          :value="recommendation.id"
+          :model-value="recommendation.id"
+          :title="recommendation.label"
+          :subtitle="recommendation.dimensions"
+          badge="치수 추천"
+          badge-tone="gold"
+          :rate="recommendation.fillRate"
+          :rate-tone="fillTone(recommendation.fillRate)"
         />
-      </FormField>
+      </section>
 
       <InlineNotice>저장하면 치수에 맞춰 적합 여부와 포장공간비율을 다시 계산해요.</InlineNotice>
     </form>
@@ -154,9 +125,7 @@ function handleSave() {
     <template #footer>
       <button class="product-edit__deactivate" type="button" @click="emit('deactivate')">상품 비활성화</button>
       <AppButton @click="emit('close')">취소</AppButton>
-      <AppButton variant="primary" :disabled="busy || (isManualPick && !form.manualReason.trim())" @click="handleSave"
-        >저장하기</AppButton
-      >
+      <AppButton variant="primary" :disabled="busy" @click="handleSave">저장하기</AppButton>
     </template>
   </BaseModal>
 </template>
@@ -230,16 +199,6 @@ function handleSave() {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.4;
-}
-
-.product-edit__matching-sort {
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.product-edit__candidates {
-  display: grid;
-  gap: 10px;
 }
 
 /* 비활성화는 파괴적 동작이라 푸터 왼쪽 끝에 따로 둡니다. */
