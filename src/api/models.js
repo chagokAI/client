@@ -6,7 +6,8 @@ export function orderDetail(o) {
     number: o.poNo,
     status: o.status,
     statusLabel: ORDER[o.status],
-    currentStepIndex: { PENDING: 1, APPROVED: 2, IN_TRANSIT: 3, RECEIVED: 4 }[o.status] ?? 0,
+    // 단계에서 '배송 중'을 뺐으므로, 배송 중 발주서는 직전 단계(승인 완료)에 머문 것으로 표시합니다.
+    currentStepIndex: { PENDING: 1, APPROVED: 2, IN_TRANSIT: 2, RECEIVED: 3 }[o.status] ?? 0,
     caption: o.proposalGeneratedAt ? `제안서 생성 ${time(o.proposalGeneratedAt)}` : '',
     info: [
       ['ordered-at', '발주일', date(o.createdAt)],

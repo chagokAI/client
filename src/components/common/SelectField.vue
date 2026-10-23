@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { computed, useId } from 'vue'
+
+const props = defineProps({
   modelValue: {
     type: [String, Number],
     default: '',
@@ -17,17 +19,28 @@ defineProps({
     type: String,
     default: '',
   },
+  // 테두리 선에 얹어 보여 줄 이름. (예: '카테고리') DateField 의 label 과 같은 모양입니다.
+  label: {
+    type: String,
+    default: '',
+  },
 })
 
 defineEmits(['update:modelValue'])
+
+// 테두리 라벨을 <label for>로 묶으려면 선택 상자에 id가 있어야 합니다.
+const autoId = useId()
+const selectId = computed(() => (props.label ? autoId : ''))
 </script>
 
 <template>
   <div class="select-field" :style="width ? { width } : undefined">
+    <label v-if="label" class="select-field__label" :for="selectId">{{ label }}</label>
     <select
+      :id="selectId || undefined"
       class="select-field__control"
       :value="modelValue"
-      :aria-label="ariaLabel || undefined"
+      :aria-label="label ? undefined : ariaLabel || undefined"
       @change="$emit('update:modelValue', $event.target.value)"
     >
       <option v-for="option in options" :key="option.value" :value="option.value">
@@ -45,6 +58,21 @@ defineEmits(['update:modelValue'])
   position: relative;
   display: inline-flex;
   min-width: 0;
+}
+
+/* 라벨은 테두리 선 위에 걸쳐 앉습니다. 높이는 그대로 40px이라 같은 줄의 다른 입력과 가운데가 맞습니다. */
+.select-field__label {
+  position: absolute;
+  top: -7px;
+  left: 9px;
+  padding: 0 4px;
+  background: var(--color-white);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .select-field__control {

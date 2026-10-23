@@ -1,11 +1,11 @@
 <script setup>
+import { computed, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import DataTable from '@/components/common/DataTable.vue'
-import AgentApprovalPanel from './AgentApprovalPanel.vue'
 import { auth } from '@/stores/auth'
 
-// 다음 달 주문 제안서 카드. 계산 실행 · AI 개선 실행 · 발주서 반영까지 맡습니다.
+// 다음 달 주문 제안서 카드. 제안서 생성 · 발주서 반영을 맡습니다.
 const props = defineProps({
   // proposalModel() 결과. 아직 제안서가 없으면 null 입니다.
   proposal: { type: Object, default: null },
@@ -17,13 +17,18 @@ const props = defineProps({
   jobRunning: Boolean,
   jobFailed: Boolean,
   jobNotice: { type: String, default: '' },
-  agentRunning: Boolean,
-  agentFailed: Boolean,
-  agentNotice: { type: String, default: '' },
-  agentApproval: { type: Object, default: null },
 })
 
-const emit = defineEmits(['run-job', 'run-agent', 'apply', 'agent-decide'])
+const emit = defineEmits(['run-job', 'apply'])
+
+// 제안서는 처음에 접어 두고, [제안서 생성하기]를 누른 뒤부터 보여 줍니다.
+const expanded = ref(false)
+const shown = computed(() => expanded.value && Boolean(props.proposal))
+
+function generate() {
+  expanded.value = true
+  emit('run-job')
+}
 
 const proposalColumns = [
   { key: 'code', label: '규격', width: '16%' },
@@ -42,39 +47,16 @@ const effectColumns = [
 </script>
 
 <template>
-  <AppCard class="proposal">
-    <template #header>
-      <div class="card-title-row">
-        <h2 class="card-title">박스 주문 제안서</h2>
-        <span v-if="proposal" class="ai-tag">{{ proposal.baseline ? '참고 계산' : 'AI 생성' }}</span>
-      </div>
-    </template>
-
+  <AppCard class="proposal" title="박스 주문 제안서">
     <template #actions>
-      <span v-if="proposal" class="card-meta">{{ proposal.createdAt }}</span>
-      <AppButton size="sm" :disabled="!auth.canEdit.value || busy || jobRunning" @click="emit('run-job')">
-        {{ jobRunning ? '계산 중…' : proposal ? '다시 계산' : '계산 실행' }}
-      </AppButton>
-      <AppButton size="sm" variant="primary" :disabled="!auth.canEdit.value || agentRunning" @click="emit('run-agent')">
-        {{ agentRunning ? 'AI 실행 중…' : '개선 실행' }}
-      </AppButton>
+      <span v-if="shown" class="card-meta">{{ proposal.createdAt }}</span>
     </template>
-
-    <p v-if="agentNotice" class="job-notice" :class="{ 'job-notice--error': agentFailed }" role="status">
-      {{ agentNotice }}
-    </p>
-
-    <AgentApprovalPanel
-      v-if="agentApproval"
-      :approval="agentApproval"
-      @decide="(decision, comment) => emit('agent-decide', decision, comment)"
-    />
 
     <p v-if="jobNotice" class="job-notice" :class="{ 'job-notice--error': jobFailed }" role="status">
       {{ jobNotice }}
     </p>
 
-    <template v-if="proposal">
+    <template v-if="shown">
       <div class="proposal__headline">
         <p class="proposal__headline-text">{{ proposal.headline }}</p>
         <p class="proposal__headline-sub">{{ proposal.subline }}</p>
@@ -125,43 +107,42 @@ const effectColumns = [
           <p class="comparison__change">{{ item.change }}</p>
         </li>
       </ul>
-
-      <AppButton
-        class="proposal__apply"
-        variant="secondary"
-        block
-        :disabled="!auth.canEdit.value || busy || !proposal.totalQty"
-        @click="emit('apply')"
-      >
-        발주서에 반영하기 <span aria-hidden="true">→</span>
-      </AppButton>
-      <p v-if="!auth.canEdit.value" class="card-hint">발주서는 운영자 이상 권한으로 만들 수 있어요.</p>
     </template>
+
+    <div v-else-if="!expanded" class="empty-state">
+      <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서를 만들어 보세요.</p>
+      <p class="empty-state__text">
+        [제안서 생성하기]를 누르면 최근 관측 이력으로 제안서를 만들어요. 활성 규격과 현재 재고·안전 재고·단가가 등록되어
+        있어야 계산할 수 있어요.
+      </p>
+    </div>
 
     <div v-else-if="loaded" class="empty-state">
       <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
       <p class="empty-state__text">
-        [계산 실행]을 누르면 최근 관측 이력으로 참고 제안서를 만들어요. 활성 규격과 현재 재고·안전 재고·단가가 등록되어
-        있어야 계산할 수 있어요.
+        활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요. 등록 후 다시 눌러 주세요.
       </p>
     </div>
+
+    <div class="proposal__actions">
+      <AppButton variant="primary" block :disabled="!auth.canEdit.value || busy || jobRunning" @click="generate">
+        {{ jobRunning ? '계산 중…' : '제안서 생성하기' }}
+      </AppButton>
+      <AppButton
+        variant="secondary"
+        block
+        :disabled="!auth.canEdit.value || busy || !shown || !proposal.totalQty"
+        @click="emit('apply')"
+      >
+        발주서 생성하기 <span aria-hidden="true">→</span>
+      </AppButton>
+    </div>
+
+    <p v-if="!auth.canEdit.value" class="card-hint">발주서는 운영자 이상 권한으로 만들 수 있어요.</p>
   </AppCard>
 </template>
 
 <style scoped>
-.ai-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: var(--radius-pill);
-  background: var(--color-navy);
-  color: var(--color-white);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-}
-
 .card-hint {
   margin: 8px 0 0;
   color: var(--color-text-muted);
@@ -304,7 +285,10 @@ const effectColumns = [
   line-height: 1.4;
 }
 
-.proposal__apply {
+.proposal__actions {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 20px;
 }
 </style>

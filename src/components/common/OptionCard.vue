@@ -41,14 +41,23 @@ defineProps({
     type: String,
     default: 'info',
   },
+  // 고를 수 없는 카드. 라디오 없이 내용만 보여 줍니다.
+  readonly: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <label class="option-card" :class="{ 'option-card--selected': value === modelValue }">
+  <label
+    class="option-card"
+    :class="{ 'option-card--selected': value === modelValue, 'option-card--readonly': readonly }"
+  >
     <input
+      v-if="!readonly"
       class="option-card__radio"
       type="radio"
       :name="name"
@@ -87,13 +96,20 @@ defineEmits(['update:modelValue'])
     background-color 160ms ease;
 }
 
-.option-card:hover {
+.option-card:not(.option-card--readonly):hover {
   border-color: var(--color-border);
 }
 
 .option-card--selected {
   border-color: var(--color-brown);
   background: var(--color-cream);
+}
+
+/* 고를 수 없는 카드: 테두리와 hover 반응 없이 바탕색만 남깁니다. (선택 규칙보다 뒤에 둡니다) */
+.option-card--readonly {
+  border-color: transparent;
+  cursor: default;
+  transition: none;
 }
 
 .option-card__radio {

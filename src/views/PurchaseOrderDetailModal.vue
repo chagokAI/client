@@ -4,7 +4,7 @@ import BaseModal from '@/components/common/BaseModal.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import StepProgress from '@/components/common/StepProgress.vue'
-const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 완료', '배송 중', '입고 완료']
+const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 완료', '입고 완료']
 
 defineProps({
   detail: {

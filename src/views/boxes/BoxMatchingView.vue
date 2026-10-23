@@ -15,7 +15,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProductDeleteModal from './ProductDeleteModal.vue'
 import ProductEditModal from './ProductEditModal.vue'
 import { auth, warehouseApi } from '@/stores/auth'
-import { MATCH } from '@/api/format'
+import { MATCH, fillTone } from '@/api/format'
 import { productRow } from '@/api/rows'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSaveAction } from '@/composables/useSaveAction'
@@ -40,15 +40,15 @@ const matchSortOptions = [
   { value: 'fill-asc', label: '포장공간비율 낮은 순' },
   { value: 'name', label: '상품명 순' },
 ]
-const productCategories = computed(() => [{ value: 'all', label: '카테고리: 전체' }, ...categories.value])
+const productCategories = computed(() => [{ value: 'all', label: '전체' }, ...categories.value])
 const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
   ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
 ])
 const rows = computed(() => products.value)
 const columns = [
-  { key: 'name', label: '상품명 / 상품코드', width: '22%' },
-  { key: 'category', label: '카테고리', width: '10%' },
+  { key: 'name', label: '상품명 / 상품코드', width: '22%', align: 'left' },
+  { key: 'category', label: '카테고리', width: '10%', align: 'left' },
   { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' },
   { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
   { key: 'fillRate', label: '포장공간비율', width: '14%' },
@@ -66,6 +66,7 @@ const { loading, error, page, totalPages, refresh } = useListQuery(
         categoryId: category.value === 'all' ? undefined : category.value,
         status: statusFilter.value === 'all' ? undefined : statusFilter.value,
         page,
+        size: 10,
         sort: { 'fill-desc': 'fillRatePct,desc', 'fill-asc': 'fillRatePct,asc', name: 'name,asc' }[sort.value],
       },
     }),
@@ -83,9 +84,6 @@ onMounted(async () => {
     toastMessage.value = cause.message
   }
 })
-function fillTone(value) {
-  return value >= 85 ? 'info' : 'warning'
-}
 async function openEdit(row) {
   try {
     const { data } = await warehouseApi(`/products/${row.id}`)
@@ -110,7 +108,6 @@ function handleSave(form) {
         heightMm: dimensions[2],
         weightG: form.weight === '' ? undefined : Number(form.weight),
         boxSpecId: form.matchedBoxId || undefined,
-        matchOverrideReason: form.manualReason || undefined,
       },
     })
     editingProduct.value = null
@@ -137,8 +134,10 @@ function handleDelete() {
   <div class="box-matching">
     <PageHeader title="물품-박스 매칭 현황" description="상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다." />
 
-    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :error="error" @retry="refresh" />
     <FilterBar>
+      <SelectField v-model="category" :options="productCategories" width="170px" label="카테고리" />
+
       <div class="box-matching__search">
         <SelectField v-model="searchField" :options="productSearchFields" width="110px" aria-label="검색 기준" />
         <SearchInput
@@ -149,27 +148,29 @@ function handleDelete() {
         />
       </div>
 
-      <SelectField v-model="category" :options="productCategories" width="170px" aria-label="카테고리" />
-
-      <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="매칭 상태" />
-
-      <SelectField
-        v-model="sort"
-        class="box-matching__sort"
-        :options="matchSortOptions"
-        width="180px"
-        aria-label="정렬 기준"
-      />
+      <template #second>
+        <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="매칭 상태" />
+        <SelectField
+          v-model="sort"
+          class="box-matching__sort"
+          :options="matchSortOptions"
+          width="180px"
+          aria-label="정렬 기준"
+        />
+      </template>
     </FilterBar>
 
-    <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 상품이 없습니다.">
+    <DataTable
+      :columns="columns"
+      :rows="rows"
+      row-key="id"
+      :loading="loading"
+      empty-text="조건에 맞는 상품이 없습니다."
+    >
       <template #cell-name="{ row }">
         <div class="product">
-          <span class="product__thumbnail" aria-hidden="true" />
-          <div>
-            <p class="product__name">{{ row.name }}</p>
-            <p class="product__code">{{ row.code }}</p>
-          </div>
+          <p class="product__name">{{ row.name }}</p>
+          <p class="product__code">{{ row.code }}</p>
         </div>
       </template>
 
@@ -229,7 +230,7 @@ function handleDelete() {
   gap: 0;
   flex: 1;
   min-width: 280px;
-  max-width: 420px;
+  max-width: 520px;
 }
 
 .box-matching__search :deep(.select-field__control) {
@@ -237,7 +238,13 @@ function handleDelete() {
   border-bottom-right-radius: 0;
 }
 
+/* 검색 기준 선택과 입력창을 한 덩어리처럼 붙여 보여 줍니다. ([검색] 버튼은 떨어뜨립니다) */
 .box-matching__keyword {
+  flex: 1;
+  min-width: 0;
+}
+
+.box-matching__keyword :deep(.search-input__control) {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left: 0;
@@ -245,20 +252,6 @@ function handleDelete() {
 
 .box-matching__sort {
   margin-left: auto;
-}
-
-.product {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.product__thumbnail {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-cream-strong);
 }
 
 .product__name {

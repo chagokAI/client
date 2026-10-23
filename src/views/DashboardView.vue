@@ -79,7 +79,7 @@ function goToOrderHistory() {
         <div class="simulation__heading">
           <div class="simulation__title-row">
             <h2 class="simulation__title">실시간 센터 현황</h2>
-            <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
+            <span class="simulation__live"><span class="simulation__live-dot" />LIVE</span>
           </div>
         </div>
       </template>

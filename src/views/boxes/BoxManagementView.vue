@@ -33,7 +33,7 @@ const formModal = ref(null),
 const { saving, toastMessage, run } = useSaveAction()
 const columns = [
   { key: 'actions', label: '관리', width: '180px' },
-  { key: 'code', label: '박스 규격명', width: '190px' },
+  { key: 'code', label: '박스 규격명', width: '190px', align: 'left' },
   { key: 'current', label: '현재 재고', width: '100px' },
   { key: 'safety', label: '안전 재고', width: '100px' },
   { key: 'level', label: '재고 수준', width: '170px' },
@@ -41,7 +41,7 @@ const columns = [
   { key: 'linkedProducts', label: '연결 상품 수', width: '110px' },
   { key: 'status', label: '사용 여부', width: '100px' },
   { key: 'supplier', label: '공급사', width: '130px' },
-  { key: 'description', label: '간단 설명', width: '240px' },
+  { key: 'description', label: '간단 설명', width: '240px', align: 'left' },
 ]
 const TONE_BY_STOCK = { SUFFICIENT: 'info', CAUTION: 'warning', SHORTAGE: 'danger', UNKNOWN: 'neutral' }
 const inventoryStats = computed(() => [
@@ -79,10 +79,7 @@ const statusOptions = computed(() => [
   { value: 'CUSTOM', label: '★', count: counts.value.CUSTOM ?? 0 },
 ])
 const rows = computed(() => specs.value)
-const specSummary = computed(
-  () =>
-    `총 ${number(summary.value?.totalSpecCount)}개 규격 · 표준 ${number(summary.value?.standardSpecCount)} · 커스텀 ${number(summary.value?.customSpecCount)}`,
-)
+const specSummary = computed(() => `총 ${number(summary.value?.totalSpecCount)}개`)
 const supplierOptions = ref([{ value: '', label: '미지정' }])
 // 규격과 재고는 API가 나뉘어 있어 함께 불러온 뒤 규격명(code) 기준으로 한 행에 묶습니다.
 // TODO: /box-specs 응답에 재고(현재·안전·재고 수준)와 요약이 포함되면 호출 하나로 줄입니다.
@@ -222,14 +219,17 @@ function handleStockInSubmit(form) {
       </template>
     </PageHeader>
 
-    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :error="error" @retry="refresh" />
 
-    <StatGrid :stats="inventoryStats" />
+    <StatGrid :stats="inventoryStats" band />
 
     <FilterBar>
       <SearchInput v-model="keyword" width="320px" placeholder="규격명 · 사이즈명 검색" aria-label="박스 규격 검색" />
-      <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="규격 사용 여부" />
       <template #aside>{{ specSummary }}</template>
+
+      <template #second>
+        <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="규격 사용 여부" />
+      </template>
     </FilterBar>
 
     <DataTable
@@ -237,6 +237,7 @@ function handleStockInSubmit(form) {
       :rows="rows"
       row-key="id"
       min-width="1440px"
+      :loading="loading"
       empty-text="조건에 맞는 규격이 없습니다."
     >
       <template #cell-code="{ row }">
@@ -274,6 +275,11 @@ function handleStockInSubmit(form) {
 
       <template #cell-status="{ row }">
         <StatusBadge :label="row.statusLabel" />
+      </template>
+
+      <!-- 설명이 길어도 줄 높이가 늘지 않도록 한 줄로 자릅니다. 전문은 마우스를 올리면 보입니다. -->
+      <template #cell-description="{ row }">
+        <span class="spec-description" :title="row.description">{{ row.description }}</span>
       </template>
 
       <template #cell-actions="{ row }">
@@ -345,6 +351,15 @@ function handleStockInSubmit(form) {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+}
+
+/* 간단 설명: 칸 너비(240px)에서 좌우 여백을 뺀 만큼만 쓰고 넘치면 말줄임표 */
+.spec-description {
+  display: block;
+  max-width: 204px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .spec-code__size {

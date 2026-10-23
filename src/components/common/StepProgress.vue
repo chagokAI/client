@@ -63,10 +63,16 @@ defineProps({
   white-space: nowrap;
 }
 
-/* 단계 사이를 잇는 선 */
+/* 마지막 단계만 제자리에 두고, 앞 단계들이 남은 가로 폭을 나눠 가져 전체를 꽉 채웁니다. */
+.step-progress__step:not(:last-child) {
+  flex: 1;
+}
+
+/* 단계 사이를 잇는 선. 늘어나는 폭은 이 선이 받습니다. */
 .step-progress__step:not(:last-child)::after {
   content: '';
-  width: 48px;
+  flex: 1;
+  min-width: 16px;
   height: 1px;
   margin-left: 4px;
   background: var(--color-card-border);
