@@ -45,6 +45,12 @@ const routes = [
     component: () => import('@/views/PurchaseOrderHistoryView.vue'),
     meta: { title: '발주서 이력 관리' },
   },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfileView.vue'),
+    meta: { title: '내 정보' },
+  },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
 ]
 
