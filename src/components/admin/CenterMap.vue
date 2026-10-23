@@ -13,6 +13,9 @@ const props = defineProps({
 const KOREA_CENTER = [36.4, 127.8]
 const KOREA_ZOOM = 8
 
+// .env.local 의 VITE_CARTO_KEY. 프론트 키라 번들에 그대로 들어갑니다(숨길 수 없음).
+const CARTO_KEY = import.meta.env.VITE_CARTO_KEY ?? ''
+
 const el = ref(null)
 let map = null
 let pins = null
@@ -36,11 +39,18 @@ function drawPins() {
 }
 
 onMounted(() => {
-  map = L.map(el.value, { scrollWheelZoom: false, zoomSnap: 0.25 }).setView(KOREA_CENTER, KOREA_ZOOM)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  map = L.map(el.value, { scrollWheelZoom: true, zoomSnap: 0.25 }).setView(KOREA_CENTER, KOREA_ZOOM)
+  // CARTO Voyager(라벨 없음): 바다·녹지·도로 색은 살아 있고 글자만 빠진 스타일입니다.
+  // 2026-09-25 부터 래스터 타일은 키가 있어야 합니다. 키가 없으면 워터마크만 보입니다.
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
+    // 래스터 타일은 18단계까지만 있고, 그보다 확대하면 같은 타일을 늘려 씁니다.
+    maxNativeZoom: 18,
+    maxZoom: 20,
+    subdomains: 'abcd',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attribution/">CARTO</a>',
   }).addTo(map)
+
   pins = L.layerGroup().addTo(map)
   drawPins()
 
@@ -71,6 +81,7 @@ onBeforeUnmount(() => {
 }
 
 /* Leaflet이 만든 요소에는 scoped 속성이 붙지 않아 :deep()으로 꾸밉니다. */
+
 .center-map :deep(.center-map__pin) {
   fill: var(--color-gold);
   fill-opacity: 0.9;
