@@ -16,7 +16,8 @@ const router = useRouter()
 const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
 
-const navItems = [
+// adminOnly 항목은 관리자에게만 보입니다. 라우트도 meta.admin 으로 함께 막습니다.
+const NAV_ITEMS = [
   {
     to: '/dashboard',
     label: '실시간 센터 현황',
@@ -40,10 +41,24 @@ const navItems = [
     label: '물품-박스 매칭 현황',
     icon: 'M4 5.5h.01M4 10h.01M4 14.5h.01M7.5 5.5H17M7.5 10H17M7.5 14.5H17',
   },
+  {
+    to: '/admin/dashboard',
+    label: '실시간 센터 현황(관리자)',
+    icon: 'M10 2.5 16 5v4.8c0 3.4-2.4 6.1-6 7.2-3.6-1.1-6-3.8-6-7.2V5l6-2.5Zm-2.4 7.2 1.8 1.8 3.2-3.3',
+    adminOnly: true,
+  },
+  {
+    to: '/admin/reports',
+    label: '센터별 리포트/지침서',
+    icon: 'M6 3h5l3 3v10.5a.5.5 0 0 1-.5.5H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm5 0v3h3M7.5 10h5M7.5 13h5',
+    adminOnly: true,
+  },
 ]
 
+const navItems = computed(() => NAV_ITEMS.filter((item) => !item.adminOnly || auth.isAdmin.value))
+
 // 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
-const openGroups = ref(navItems.filter((item) => item.children).map((item) => item.label))
+const openGroups = ref(NAV_ITEMS.filter((item) => item.children).map((item) => item.label))
 
 function hasActiveChild(item) {
   return !!item.children?.some((child) => route.path === child.to)
@@ -71,7 +86,7 @@ function toggleGroup(item) {
 watch(
   () => route.path,
   () => {
-    const labels = navItems.filter(hasActiveChild).map((item) => item.label)
+    const labels = NAV_ITEMS.filter(hasActiveChild).map((item) => item.label)
     const added = labels.filter((label) => !openGroups.value.includes(label))
     if (added.length) openGroups.value = [...openGroups.value, ...added]
   },

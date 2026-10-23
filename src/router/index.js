@@ -45,6 +45,19 @@ const routes = [
     component: () => import('@/views/PurchaseOrderHistoryView.vue'),
     meta: { title: '발주서 이력 관리' },
   },
+  // 관리자 전용. meta.admin 이 붙은 경로는 아래 beforeEach 에서 막습니다.
+  {
+    path: '/admin/dashboard',
+    name: 'admin-dashboard',
+    component: () => import('@/views/admin/AdminDashboardView.vue'),
+    meta: { title: '실시간 센터 현황 (관리자)', admin: true },
+  },
+  {
+    path: '/admin/reports',
+    name: 'admin-reports',
+    component: () => import('@/views/admin/CenterReportView.vue'),
+    meta: { title: '센터별 리포트/지침서', admin: true },
+  },
   {
     path: '/profile',
     name: 'profile',
@@ -65,6 +78,8 @@ router.beforeEach(async (to) => {
     const session = await auth.restore()
     if (!session && to.name !== 'login') return { name: 'login', query: { redirect: to.fullPath } }
     if (session && to.name === 'login') return { name: 'dashboard' }
+    // 관리자 전용 화면은 주소로 바로 들어와도 막습니다. (판정 기준은 메뉴와 같은 auth.isAdmin)
+    if (to.meta.admin && !auth.isAdmin.value) return { name: 'dashboard' }
   } catch {
     if (to.name !== 'login') return { name: 'login', query: { connection: 'unavailable' } }
   }

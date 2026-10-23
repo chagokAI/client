@@ -53,6 +53,10 @@ export const auth = {
   logout,
   warehouseId: computed(() => session.value?.warehouse?.id ?? null),
   canEdit: computed(() => ['OPERATOR', 'ADMIN'].includes(session.value?.role)),
+  // 관리자 전용 화면(센터 통합 현황·리포트)은 이 값으로 메뉴와 라우트를 함께 막습니다.
+  // TODO: 개발 중에는 역할과 무관하게 모든 메뉴를 보려고 관리자로 취급합니다.
+  //       권한을 실제로 나눌 때 import.meta.env.DEV 분기를 지웁니다. (운영 빌드는 영향 없음)
+  isAdmin: computed(() => import.meta.env.DEV || session.value?.role === 'ADMIN'),
 }
 
 export function warehouseApi(path, options) {
