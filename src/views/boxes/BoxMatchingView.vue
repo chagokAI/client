@@ -47,8 +47,8 @@ const statusOptions = computed(() => [
 ])
 const rows = computed(() => products.value)
 const columns = [
-  { key: 'name', label: '상품명 / 상품코드', width: '22%' },
-  { key: 'category', label: '카테고리', width: '10%' },
+  { key: 'name', label: '상품명 / 상품코드', width: '22%', align: 'left' },
+  { key: 'category', label: '카테고리', width: '10%', align: 'left' },
   { key: 'size', label: '사이즈 (가로 × 세로 × 높이)', width: '16%' },
   { key: 'matchedBox', label: '매칭 택배 상자 규격', width: '14%' },
   { key: 'fillRate', label: '포장공간비율', width: '14%' },

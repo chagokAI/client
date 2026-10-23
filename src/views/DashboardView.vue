@@ -79,7 +79,7 @@ function goToOrderHistory() {
         <div class="simulation__heading">
           <div class="simulation__title-row">
             <h2 class="simulation__title">실시간 센터 현황</h2>
-            <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
+            <span class="simulation__live"><span class="simulation__live-dot" />LIVE</span>
           </div>
           <p class="simulation__description">창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.</p>
         </div>

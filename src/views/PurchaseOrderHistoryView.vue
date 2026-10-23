@@ -38,10 +38,11 @@ const historySortOptions = [
   { value: 'amount-desc', label: '발주 금액 높은 순' },
 ]
 const columns = [
-  { key: 'number', label: '발주번호', width: '13%' },
+  // 발주번호는 'PO-20261021-c55eb91c' 처럼 길어서 한 줄이 들어갈 폭을 둡니다.
+  { key: 'number', label: '발주번호', width: '18%', align: 'left' },
   { key: 'orderedAt', label: '발주일', width: '10%' },
-  { key: 'supplier', label: '공급사', width: '12%' },
-  { key: 'specs', label: '주문 규격', width: '15%' },
+  { key: 'supplier', label: '공급사', width: '10%' },
+  { key: 'specs', label: '주문 규격', width: '12%' },
   { key: 'quantity', label: '총 수량', width: '10%' },
   { key: 'amount', label: '발주 금액', width: '12%' },
   { key: 'deliveryAt', label: '납품(예정)일', width: '11%' },
@@ -202,6 +203,7 @@ async function openDetail(row) {
   font-size: 13px;
 }
 
+/* 발주번호는 줄바꿈되면 행 높이가 늘고 왼쪽 끝이 어긋나 보여서 한 줄로 고정합니다. */
 .order-number {
   padding: 0;
   border: 0;
@@ -209,6 +211,7 @@ async function openDetail(row) {
   color: var(--color-text);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 

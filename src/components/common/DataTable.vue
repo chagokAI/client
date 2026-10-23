@@ -57,7 +57,7 @@ const SKELETON_WIDTHS = ['72%', '54%', '86%', '62%', '78%', '48%']
 
       <thead>
         <tr>
-          <th v-for="column in columns" :key="column.key" scope="col" :style="{ textAlign: column.align || 'left' }">
+          <th v-for="column in columns" :key="column.key" scope="col">
             {{ column.label }}
           </th>
         </tr>
@@ -85,7 +85,7 @@ const SKELETON_WIDTHS = ['72%', '54%', '86%', '62%', '78%', '48%']
           :key="row[rowKey] ?? rowIndex"
           :class="{ 'data-table__row--highlight': row.highlight }"
         >
-          <td v-for="column in columns" :key="column.key" :style="{ textAlign: column.align || 'left' }">
+          <td v-for="column in columns" :key="column.key" :style="{ textAlign: column.align || 'center' }">
             <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :index="rowIndex">
               {{ row[column.key] }}
             </slot>
@@ -137,6 +137,7 @@ const SKELETON_WIDTHS = ['72%', '54%', '86%', '62%', '78%', '48%']
   font-size: 13px;
 }
 
+/* 머리글은 칸 내용의 정렬(column.align)과 무관하게 가운데에 둡니다. */
 .data-table__table th {
   padding: 14px 16px;
   background: var(--color-cream);
@@ -144,6 +145,7 @@ const SKELETON_WIDTHS = ['72%', '54%', '86%', '62%', '78%', '48%']
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
+  text-align: center;
   white-space: nowrap;
 }
 
