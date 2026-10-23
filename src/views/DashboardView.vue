@@ -4,8 +4,11 @@ import { useRouter } from 'vue-router'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
-import { auth, warehouseApi } from '@/stores/auth'
+import StatusBadge from '@/components/common/StatusBadge.vue'
+import { warehouseApi } from '@/stores/auth'
 import { dashboardModel } from '@/api/models'
+import { ORDER, localDate, number, time } from '@/api/format'
+import { orderRow } from '@/api/rows'
 import { useRemote } from '@/composables/useRemote'
 import ApiState from '@/components/common/ApiState.vue'
 import DigitalTwinViewer from '@/components/dashboard/DigitalTwinViewer.vue'
@@ -19,11 +22,36 @@ const forecast = computed(() => model.value.forecast)
 const inventorySummary = computed(() => model.value.inventorySummary)
 const costSummary = computed(() => model.value.costSummary)
 const safetyStockAlerts = computed(() => model.value.safetyStockAlerts)
+
+// 발주 현황은 발주서 이력과 같은 기준(최근 3개월)으로 상태별 건수와 최근 발주 3건을 보여 줍니다.
+const today = localDate(),
+  [year, month] = today.split('-').map(Number)
+const orderFrom = localDate(new Date(Date.UTC(year, month - 3, 1, 12)))
+const orderPage = ref(null)
+const loadedAt = ref(null)
+const orderStatus = computed(() =>
+  ['PENDING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED'].map((status) => ({
+    id: status,
+    label: ORDER[status],
+    count: `${number(orderPage.value?.counts?.[status] ?? 0)}건`,
+  })),
+)
+const recentOrders = computed(() => (orderPage.value?.items ?? []).map(orderRow))
+
 function refresh() {
   return load(
-    (signal) => warehouseApi('/dashboard', { signal }),
-    (value) => {
-      result.value = value.data
+    (signal) =>
+      Promise.all([
+        warehouseApi('/dashboard', { signal }),
+        warehouseApi('/purchase-orders', {
+          signal,
+          query: { from: orderFrom, to: today, page: 0, size: 3, sort: 'createdAt,desc' },
+        }),
+      ]),
+    ([dashboard, orders]) => {
+      result.value = dashboard.data
+      orderPage.value = orders.data
+      loadedAt.value = new Date()
     },
   )
 }
@@ -37,52 +65,170 @@ const inventoryTotal = computed(() => inventorySummary.value.bySize.reduce((sum,
 function goToOrder() {
   router.push('/orders')
 }
+
+function goToOrderHistory() {
+  router.push('/purchase-orders')
+}
 </script>
 
 <template>
   <div class="dashboard">
     <ApiState :loading="loading" :error="error" @retry="refresh" />
-    <AppButton :disabled="loading" @click="refresh">새로고침</AppButton>
-    <h1 class="dashboard__greeting">안녕하세요, {{ auth.session.value?.warehouse?.name }}님</h1>
-
-    <div class="dashboard__top">
-      <AppCard class="dashboard__simulation" :padded="false">
-        <template #header>
-          <div class="simulation__heading">
-            <div class="simulation__title-row">
-              <h2 class="simulation__title">시뮬레이션</h2>
-              <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
-            </div>
-            <p class="simulation__description">
-              창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.
-            </p>
+    <AppCard class="dashboard__simulation" :padded="false">
+      <template #header>
+        <div class="simulation__heading">
+          <div class="simulation__title-row">
+            <h2 class="simulation__title">시뮬레이션</h2>
+            <span class="simulation__live"><span class="simulation__live-dot" />디지털트윈</span>
           </div>
-        </template>
+          <p class="simulation__description">창고 적재와 포장 공정을 가상 공간에 재현해 박스 배치를 미리 확인합니다.</p>
+        </div>
+      </template>
 
-        <template #actions>
-          <AppButton variant="secondary" @click="twin?.toggleFullscreen()">전체 화면</AppButton>
-        </template>
+      <template #actions>
+        <AppButton variant="secondary" @click="twin?.toggleFullscreen()">전체 화면</AppButton>
+      </template>
 
-        <div class="simulation__viewport">
-          <DigitalTwinViewer ref="twin" />
+      <div class="simulation__viewport">
+        <DigitalTwinViewer ref="twin" />
+      </div>
+    </AppCard>
+
+    <div class="dashboard__toolbar">
+      <h2 class="dashboard__section-title">
+        센터 현황
+        <span class="dashboard__loaded-at">{{ loadedAt ? `기준 ${time(loadedAt)}` : '' }}</span>
+      </h2>
+      <AppButton class="dashboard__refresh" :disabled="loading" aria-label="새로고침" title="새로고침" @click="refresh">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M13 8a5 5 0 1 1-1.46-3.54M13 2.5v2.5h-2.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </AppButton>
+    </div>
+
+    <div class="dashboard__bottom">
+      <AppCard :padded="false">
+        <div class="status">
+          <section class="status__section">
+            <header class="status__head">
+              <h2 class="status__title">재고 현황</h2>
+              <span class="status__meta">{{ inventorySummary.asOf }}</span>
+            </header>
+
+            <div class="inventory__columns">
+              <div v-for="column in [inventorySummary.current, inventorySummary.next]" :key="column.label">
+                <p class="inventory__label">{{ column.label }}</p>
+                <p class="inventory__value">{{ column.value }}</p>
+                <p class="inventory__hint">{{ column.hint }}</p>
+              </div>
+            </div>
+
+            <div class="inventory__by-size">
+              <div class="inventory__by-size-head">
+                <span class="inventory__by-size-title">규격별 재고</span>
+                <span class="inventory__shortage">{{ inventorySummary.shortageNote }}</span>
+              </div>
+
+              <div class="inventory__stack" role="img" aria-label="규격별 재고 비율">
+                <span
+                  v-for="item in inventorySummary.bySize"
+                  :key="item.id"
+                  class="inventory__stack-segment"
+                  :class="`inventory__stack-segment--${item.tone}`"
+                  :style="{ width: `${inventoryTotal ? (item.ratio / inventoryTotal) * 100 : 0}%` }"
+                />
+              </div>
+
+              <ul class="inventory__legend">
+                <li v-for="item in inventorySummary.bySize" :key="item.id" class="inventory__legend-item">
+                  <span class="inventory__legend-dot" :class="`inventory__legend-dot--${item.tone}`" />
+                  {{ item.label }}
+                  <strong>{{ item.quantity }}</strong>
+                </li>
+              </ul>
+            </div>
+
+            <div class="shortage">
+              <div class="inventory__by-size-head">
+                <span class="inventory__by-size-title">안전 재고 부족</span>
+                <span class="shortage__count">{{ safetyStockAlerts.count }}</span>
+              </div>
+
+              <ul class="shortage__list">
+                <li v-for="item in safetyStockAlerts.items" :key="item.id" class="shortage__item">
+                  <div class="shortage__row">
+                    <span class="shortage__code">
+                      <strong>{{ item.code }}</strong>
+                      <span class="shortage__name">{{ item.name }}</span>
+                    </span>
+                    <span class="shortage__amount">{{ item.shortage }}</span>
+                  </div>
+                  <ProgressBar :value="item.ratio" tone="danger" :label="`${item.code} 재고 수준`" />
+                  <p class="shortage__detail">{{ item.detail }}</p>
+                </li>
+              </ul>
+
+              <button class="shortage__link" type="button" @click="goToOrder">
+                박스 주문 제안서에서 발주하기 <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="status__section">
+            <header class="status__head">
+              <h2 class="status__title">발주 현황</h2>
+              <span class="status__meta">최근 3개월</span>
+            </header>
+
+            <ul class="orders__counts">
+              <li v-for="item in orderStatus" :key="item.id" class="orders__count">
+                <StatusBadge :label="item.label" />
+                <strong class="orders__count-value">{{ item.count }}</strong>
+              </li>
+            </ul>
+
+            <div class="orders__recent">
+              <span class="inventory__by-size-title">최근 발주</span>
+
+              <ul v-if="recentOrders.length" class="orders__list">
+                <li v-for="order in recentOrders" :key="order.id" class="orders__item">
+                  <div class="orders__row">
+                    <strong class="orders__number">{{ order.number }}</strong>
+                    <StatusBadge :label="order.statusLabel" />
+                  </div>
+                  <p class="orders__detail">{{ order.supplier }} · {{ order.specs }}</p>
+                  <div class="orders__row orders__row--meta">
+                    <span>{{ order.orderedAt }} 발주 · {{ order.quantity }}</span>
+                    <strong class="orders__amount">{{ order.amount }}</strong>
+                  </div>
+                </li>
+              </ul>
+              <p v-else class="orders__empty">최근 3개월 동안의 발주 내역이 없어요.</p>
+            </div>
+
+            <button class="shortage__link" type="button" @click="goToOrderHistory">
+              발주서 이력 보기 <span aria-hidden="true">→</span>
+            </button>
+          </section>
         </div>
       </AppCard>
 
-      <AppCard class="dashboard__forecast">
+      <AppCard>
         <template #header>
           <div class="forecast__title-row">
-            <h2 class="forecast__title">박스 예상 예측량</h2>
+            <h2 class="forecast__title">박스 예측량</h2>
             <span class="forecast__period">{{ forecast.period }}</span>
           </div>
         </template>
 
         <p class="forecast__basis">{{ forecast.basis }}</p>
-
         <p class="forecast__total">{{ forecast.total }}</p>
-        <p class="forecast__comparison">
-          {{ forecast.comparison }}
-          <strong class="forecast__change">{{ forecast.change }}</strong>
-        </p>
 
         <ul class="forecast__breakdown">
           <li v-for="item in forecast.breakdown" :key="item.id" class="forecast__breakdown-item">
@@ -90,14 +236,24 @@ function goToOrder() {
               <span class="forecast__breakdown-label">{{ item.label }}</span>
               <span class="forecast__breakdown-value">{{ item.quantity }} · {{ item.ratio }}%</span>
             </div>
-            <ProgressBar :value="item.ratio" :max="50" :tone="item.tone" :label="item.label" />
+            <ProgressBar :value="item.ratio" :max="100" :tone="item.tone" :label="item.label" />
           </li>
         </ul>
 
-        <section class="insight">
-          <h3 class="insight__title">분석 안내</h3>
-          <ul class="insight__list">
-            <li v-for="insight in forecast.insights" :key="insight">{{ insight }}</li>
+        <section class="cost">
+          <div class="cost__head">
+            <h3 class="cost__title">비용 · 절감</h3>
+            <span class="status__meta">{{ costSummary.note }}</span>
+          </div>
+
+          <ul class="cost__list">
+            <li v-for="item in costSummary.items" :key="item.id" class="cost__item">
+              <div class="cost__text">
+                <p class="cost__label">{{ item.label }}</p>
+                <p class="cost__hint" :class="`cost__hint--${item.hintTone}`">{{ item.hint }}</p>
+              </div>
+              <p class="cost__value" :class="`cost__value--${item.valueTone}`">{{ item.value }}</p>
+            </li>
           </ul>
         </section>
 
@@ -106,102 +262,94 @@ function goToOrder() {
         </AppButton>
       </AppCard>
     </div>
-
-    <div class="dashboard__bottom">
-      <AppCard title="재고 현황" :meta="inventorySummary.asOf">
-        <div class="inventory__columns">
-          <div v-for="column in [inventorySummary.current, inventorySummary.next]" :key="column.label">
-            <p class="inventory__label">{{ column.label }}</p>
-            <p class="inventory__value">{{ column.value }}</p>
-            <p class="inventory__hint">{{ column.hint }}</p>
-          </div>
-        </div>
-
-        <div class="inventory__by-size">
-          <div class="inventory__by-size-head">
-            <span class="inventory__by-size-title">규격별 재고</span>
-            <span class="inventory__shortage">{{ inventorySummary.shortageNote }}</span>
-          </div>
-
-          <div class="inventory__stack" role="img" aria-label="규격별 재고 비율">
-            <span
-              v-for="item in inventorySummary.bySize"
-              :key="item.id"
-              class="inventory__stack-segment"
-              :class="`inventory__stack-segment--${item.tone}`"
-              :style="{ width: `${inventoryTotal ? (item.ratio / inventoryTotal) * 100 : 0}%` }"
-            />
-          </div>
-
-          <ul class="inventory__legend">
-            <li v-for="item in inventorySummary.bySize" :key="item.id" class="inventory__legend-item">
-              <span class="inventory__legend-dot" :class="`inventory__legend-dot--${item.tone}`" />
-              {{ item.label }}
-              <strong>{{ item.quantity }}</strong>
-            </li>
-          </ul>
-        </div>
-      </AppCard>
-
-      <AppCard title="비용 · 절감" :meta="costSummary.note">
-        <ul class="cost__list">
-          <li v-for="item in costSummary.items" :key="item.id" class="cost__item">
-            <div class="cost__text">
-              <p class="cost__label">{{ item.label }}</p>
-              <p class="cost__hint" :class="`cost__hint--${item.hintTone}`">{{ item.hint }}</p>
-            </div>
-            <p class="cost__value" :class="`cost__value--${item.valueTone}`">{{ item.value }}</p>
-          </li>
-        </ul>
-      </AppCard>
-
-      <AppCard title="안전 재고 부족">
-        <template #actions>
-          <span class="shortage__count">{{ safetyStockAlerts.count }}</span>
-        </template>
-
-        <ul class="shortage__list">
-          <li v-for="item in safetyStockAlerts.items" :key="item.id" class="shortage__item">
-            <div class="shortage__row">
-              <span class="shortage__code">
-                <strong>{{ item.code }}</strong>
-                <span class="shortage__name">{{ item.name }}</span>
-              </span>
-              <span class="shortage__amount">{{ item.shortage }}</span>
-            </div>
-            <ProgressBar :value="item.ratio" tone="danger" :label="`${item.code} 재고 수준`" />
-            <p class="shortage__detail">{{ item.detail }}</p>
-          </li>
-        </ul>
-
-        <button class="shortage__link" type="button" @click="goToOrder">
-          박스 주문 제안서에서 발주하기 <span aria-hidden="true">→</span>
-        </button>
-      </AppCard>
-    </div>
   </div>
 </template>
 
 <style scoped>
-.dashboard__greeting {
-  margin: 0 0 20px;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: -0.4px;
+.dashboard__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
-.dashboard__top {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(0, 1.9fr) minmax(360px, 1fr);
+.dashboard__section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+}
+
+.dashboard__loaded-at {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.dashboard__refresh {
+  width: 38px;
+  padding: 0;
+}
+
+.dashboard__refresh svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dashboard__simulation {
   margin-bottom: 20px;
 }
 
 .dashboard__bottom {
   display: grid;
   gap: 20px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+}
+
+/* 재고 · 발주 현황 (한 카드를 좌우로 나눕니다) */
+.status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 100%;
+}
+
+.status__section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px 24px 24px;
+}
+
+.status__section + .status__section {
+  border-left: 1px solid var(--color-divider);
+}
+
+.status__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.status__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+}
+
+.status__meta {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* 시뮬레이션 */
@@ -294,18 +442,6 @@ function goToOrder() {
   letter-spacing: -1.2px;
 }
 
-.forecast__comparison {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.forecast__change {
-  color: var(--color-info);
-  font-weight: 600;
-}
-
 .forecast__breakdown {
   display: grid;
   gap: 14px;
@@ -330,39 +466,6 @@ function goToOrder() {
 .forecast__breakdown-value {
   font-size: 13px;
   font-weight: 600;
-}
-
-.insight {
-  margin-top: 20px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: var(--color-cream);
-}
-
-.insight__title {
-  margin: 0 0 8px;
-  color: var(--color-brown);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.insight__list {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding-left: 14px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.insight__list li {
-  word-break: keep-all;
-}
-
-.forecast__cta {
-  margin-top: 20px;
 }
 
 /* 재고 현황 */
@@ -481,6 +584,27 @@ function goToOrder() {
 }
 
 /* 비용 · 절감 */
+.cost {
+  margin: 22px 0 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.cost__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cost__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .cost__list {
   display: grid;
   margin: 0;
@@ -546,6 +670,12 @@ function goToOrder() {
 }
 
 /* 안전 재고 부족 */
+.shortage {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-divider);
+}
+
 .shortage__count {
   display: inline-flex;
   align-items: center;
@@ -623,13 +753,112 @@ function goToOrder() {
   text-decoration: underline;
 }
 
+.status__section > .shortage__link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+/* 발주 현황 */
+.orders__counts {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--color-divider);
+  list-style: none;
+}
+
+.orders__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-cream);
+}
+
+.orders__count-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.orders__recent {
+  padding-top: 18px;
+}
+
+.orders__list {
+  display: grid;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.orders__item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.orders__item:first-child {
+  padding-top: 0;
+}
+
+.orders__item:last-child {
+  border-bottom: 0;
+}
+
+.orders__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orders__number {
+  font-size: 13px;
+}
+
+.orders__detail {
+  margin: 4px 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.orders__row--meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.orders__amount {
+  color: var(--color-text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.orders__empty {
+  margin: 10px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1180px) {
-  .dashboard__top {
+  .dashboard__bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .status {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .dashboard__bottom {
-    grid-template-columns: minmax(0, 1fr);
+  .status__section + .status__section {
+    border-top: 1px solid var(--color-divider);
+    border-left: 0;
   }
 }
 </style>
