@@ -36,8 +36,8 @@ export function monthPeriod(month) {
 }
 export const person = (p) => (p ? [p.name, p.jobTitle, p.department].filter(Boolean).join(' · ') : '—')
 
-/** 포장공간비율 색: 85% 이상 정상(파랑) · 50% 이상 주의(노랑) · 그 아래 부적합(빨강) */
-export const fillTone = (value) => (value >= 85 ? 'info' : value >= 50 ? 'warning' : 'danger')
+/** 포장공간비율 색: 45% 이상 정상(파랑) · 30% 이상 주의(노랑) · 그 아래 부적합(빨강) */
+export const fillTone = (value) => (value >= 45 ? 'info' : value >= 30 ? 'warning' : 'danger')
 
 // 서버 코드 → 화면 라벨. 비교·분기는 서버 코드로 하고, 이 라벨은 표시에만 씁니다.
 export const MATCH = { MATCHED: '매칭 완료', REVIEW: '검토 필요', UNMATCHED: '미매칭' }
