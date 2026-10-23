@@ -1,0 +1,14 @@
+# Copy to /opt/chagok/client-deploy.conf on the server and edit its absolute paths.
+# This is a trusted Bash file, read by scripts/deploy-client.sh.
+COMPOSE_PROJECT_DIRECTORY=/opt/chagok
+COMPOSE_PROJECT_NAME=chagok-stack
+COMPOSE_FILES=(/opt/chagok/compose.yaml)
+COMPOSE_ENV_FILE=/opt/chagok/.env
+DEPLOY_STATE_DIR=/opt/chagok/.client-deploy
+IMAGE_REPOSITORY=ghcr.io/chagokai/client
+SMOKE_BASE_URL=http://127.0.0.1:8080
+# Set to the external HTTPS origin to also verify the public proxy and TLS route.
+PUBLIC_BASE_URL=
+HEALTH_TIMEOUT=90
+HTTP_ATTEMPTS=6
+HTTP_RETRY_DELAY=2

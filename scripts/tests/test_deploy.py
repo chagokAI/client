@@ -1,0 +1,302 @@
+import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import tempfile
+import unittest
+
+
+SCRIPT = Path(__file__).resolve().parents[1] / "deploy-client.sh"
+OLD_ID = "sha256:" + "a" * 64
+NEW_ID = "sha256:" + "b" * 64
+IMAGE = "ghcr.io/chagokai/client@sha256:" + "c" * 64
+ROLLBACK = "chagok-client-rollback:" + "a" * 64
+
+# Simulate Docker and HTTP boundaries while running the real deployment script.
+# Failures happen after the service changes, so the tests exercise restoration.
+FAKE_TOOL = r'''#!/usr/bin/env python3
+import json, os, pathlib, re, sys
+root = pathlib.Path(os.environ["MOCK_ROOT"])
+state_file = root / "docker.json"
+state = json.loads(state_file.read_text())
+args = sys.argv[1:]
+tool = pathlib.Path(sys.argv[0]).name
+with (root / "commands.jsonl").open("a") as log:
+    log.write(json.dumps([tool, *args]) + "\n")
+def save():
+    state_file.write_text(json.dumps(state))
+def fail():
+    sys.exit(1)
+if tool == "flock":
+    sys.exit(1 if state.get("locked") else 0)
+if tool == "curl":
+    url = args[-1]
+    if url.endswith("/healthz"):
+        print("ok", end="")
+    elif url.endswith("/login"):
+        print('<html><div id="app"></div></html>')
+    elif state.get("bad_api") and state["current"] == state["new"]:
+        print('<html><div id="app"></div></html>')
+    else:
+        print(json.dumps({"data": {"headerName": "X-CSRF-TOKEN", "token": "test"}}))
+elif args[0] == "compose":
+    if "config" in args:
+        pass
+    elif "ps" in args:
+        if not state.get("missing_container"):
+            print("frontend-container")
+    elif "up" in args:
+        index = len(args) - 1 - args[::-1].index("-f")
+        image = re.search(r'image: "([^"]+)"', pathlib.Path(args[index + 1]).read_text())[1]
+        state["current"] = state["images"][image]
+        save()
+        if (state.get("bad_start") and state["current"] == state["new"]) or state.get("bad_rollback"):
+            fail()
+    else:
+        fail()
+elif args[0] == "inspect":
+    print(state["current"])
+elif args[0] == "pull":
+    if state.get("bad_pull"):
+        fail()
+elif args[:2] == ["image", "inspect"]:
+    print(state["images"][args[-1]])
+elif args[:2] == ["image", "tag"]:
+    state["images"][args[-1]] = args[-2]
+    save()
+else:
+    fail()
+'''
+
+
+class DeploymentTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.deploy_state = self.root / "releases"
+        self.deploy_state.mkdir()
+        for tool in ("docker", "curl", "flock"):
+            path = self.bin / tool
+            path.write_text(FAKE_TOOL)
+            path.chmod(0o755)
+        self.state = {
+            "current": OLD_ID,
+            "new": NEW_ID,
+            "images": {IMAGE: NEW_ID},
+        }
+        self.save()
+        compose = self.root / "compose.yaml"
+        compose.write_text("services: {}\n")
+        self.config = self.root / "deploy.conf"
+        quote = lambda value: shlex.quote(str(value))
+        self.config.write_text(
+            f"COMPOSE_PROJECT_DIRECTORY={quote(self.root)}\n"
+            "COMPOSE_PROJECT_NAME=existing-stack\n"
+            f"COMPOSE_FILES=({quote(compose)})\n"
+            f"DEPLOY_STATE_DIR={quote(self.deploy_state)}\n"
+            "SMOKE_BASE_URL=http://127.0.0.1:8080\n"
+            "HTTP_ATTEMPTS=1\n"
+            "HTTP_RETRY_DELAY=0\n"
+        )
+
+    def save(self):
+        (self.root / "docker.json").write_text(json.dumps(self.state))
+
+    def run_deploy(self, mode="deploy", image=IMAGE):
+        return subprocess.run(
+            ["bash", str(SCRIPT), mode, image, str(self.config)],
+            env={**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "MOCK_ROOT": str(self.root)},
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+
+    def commands(self):
+        path = self.root / "commands.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def current(self):
+        return json.loads((self.root / "docker.json").read_text())["current"]
+
+    def up_commands(self):
+        return [cmd for cmd in self.commands() if cmd[:2] == ["docker", "compose"] and "up" in cmd]
+
+    def test_success_changes_only_frontend_and_records_rollback(self):
+        result = self.run_deploy()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.current(), NEW_ID)
+        self.assertEqual((self.deploy_state / "current-image").read_text().strip(), IMAGE)
+        self.assertEqual((self.deploy_state / "previous-image").read_text().strip(), ROLLBACK)
+        command = self.up_commands()[0]
+        self.assertIn("existing-stack", command)
+        for option in ("--no-deps", "--no-build", "--wait"):
+            self.assertIn(option, command)
+        self.assertEqual(command[-1], "frontend")
+        self.assertFalse(any("down" in cmd or "prune" in cmd for cmd in self.commands()))
+
+    def test_failed_pull_leaves_running_service_and_state_untouched(self):
+        self.state["bad_pull"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current(), OLD_ID)
+        self.assertEqual(self.up_commands(), [])
+        self.assertFalse((self.deploy_state / "frontend.image.yaml").exists())
+
+    def test_unhealthy_new_container_restores_old_image(self):
+        self.state["bad_start"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current(), OLD_ID)
+        self.assertEqual(len(self.up_commands()), 2)
+        self.assertIn("Previous frontend restored", result.stderr)
+        self.assertIn(ROLLBACK, (self.deploy_state / "frontend.image.yaml").read_text())
+        self.assertFalse((self.deploy_state / "current-image").exists())
+
+    def test_html_from_api_is_failure_even_when_http_status_is_200(self):
+        self.state["bad_api"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current(), OLD_ID)
+        self.assertIn("restored", (self.deploy_state / "history.tsv").read_text())
+
+    def test_failed_rollback_is_reported_as_failure(self):
+        self.state.update(bad_start=True, bad_rollback=True)
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Automatic rollback failed", result.stderr)
+        self.assertIn("rollback-failed", (self.deploy_state / "history.tsv").read_text())
+
+    def test_manual_rollback_restores_recorded_image(self):
+        first = self.run_deploy()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        result = self.run_deploy(mode="rollback", image="")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.current(), OLD_ID)
+        self.assertEqual((self.deploy_state / "current-image").read_text().strip(), ROLLBACK)
+
+    def test_redeploying_same_image_preserves_previous_release(self):
+        self.assertEqual(self.run_deploy().returncode, 0)
+        command_count = len(self.up_commands())
+        result = self.run_deploy()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.up_commands()), command_count)
+        self.assertEqual((self.deploy_state / "previous-image").read_text().strip(), ROLLBACK)
+
+    def test_mutable_tag_and_other_repository_are_rejected(self):
+        for image in ("ghcr.io/chagokai/client:latest", IMAGE.replace("chagokai/client", "other/client")):
+            with self.subTest(image=image):
+                self.assertNotEqual(self.run_deploy(image=image).returncode, 0)
+        self.assertEqual(self.up_commands(), [])
+        self.assertFalse(any(cmd[1:2] == ["pull"] for cmd in self.commands()))
+
+    def test_missing_frontend_requires_bootstrap_without_starting_other_services(self):
+        self.state["missing_container"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bootstrap the stack first", result.stderr)
+        self.assertEqual(self.up_commands(), [])
+
+    def test_server_lock_blocks_overlapping_deployments(self):
+        self.state["locked"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already running", result.stderr)
+        self.assertFalse(any(cmd[0] == "docker" for cmd in self.commands()))
+
+    def test_failed_release_preserves_previous_successful_release_records(self):
+        self.assertEqual(self.run_deploy().returncode, 0)
+        self.state = json.loads((self.root / "docker.json").read_text())
+        third_id = "sha256:" + "d" * 64
+        third_image = IMAGE.replace("c" * 64, "e" * 64)
+        self.state.update(new=third_id, bad_api=True)
+        self.state["images"][third_image] = third_id
+        self.save()
+        result = self.run_deploy(image=third_image)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current(), NEW_ID)
+        self.assertEqual((self.deploy_state / "current-image").read_text().strip(), IMAGE)
+        self.assertEqual((self.deploy_state / "previous-image").read_text().strip(), ROLLBACK)
+
+
+class SshTransportTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        ssh = self.root / "ssh"
+        ssh.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, pathlib, stat, sys\n"
+            "args = sys.argv[1:]\n"
+            "key = pathlib.Path(args[args.index('-i') + 1])\n"
+            "pathlib.Path(os.environ['SSH_CAPTURE']).write_text(json.dumps({"
+            "'args': args, 'key': str(key), 'mode': stat.S_IMODE(key.stat().st_mode), "
+            "'script': sys.stdin.read()}))\n"
+            "sys.exit(int(os.environ.get('SSH_EXIT', '0')))\n"
+        )
+        ssh.chmod(0o755)
+        self.env = {
+            **os.environ,
+            "PATH": f"{self.root}:{os.environ['PATH']}",
+            "DEPLOY_HOST": "deploy.example.com",
+            "DEPLOY_USER": "deploy",
+            "DEPLOY_PORT": "2222",
+            "DEPLOY_CONFIG": "/opt/chagok/client-deploy.conf",
+            "DEPLOY_SSH_KEY": "test-private-key",
+            "DEPLOY_KNOWN_HOSTS": "test-host-key",
+            "SSH_CAPTURE": str(self.root / "ssh.json"),
+        }
+
+    def run_transport(self, image=IMAGE):
+        return subprocess.run(
+            ["bash", str(SCRIPT.with_name("deploy-over-ssh.sh")), "deploy", image],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+    def test_transport_checks_host_key_and_removes_private_key_after_use(self):
+        result = self.run_transport()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captured = json.loads((self.root / "ssh.json").read_text())
+        self.assertIn("StrictHostKeyChecking=yes", captured["args"])
+        self.assertEqual(captured["mode"], 0o600)
+        self.assertFalse(Path(captured["key"]).exists())
+        self.assertEqual(captured["script"], SCRIPT.read_text())
+        self.assertNotIn("test-private-key", result.stdout + result.stderr)
+
+    def test_transport_preserves_remote_failure_status(self):
+        self.env["SSH_EXIT"] = "41"
+        result = self.run_transport()
+        self.assertEqual(result.returncode, 41)
+        captured = json.loads((self.root / "ssh.json").read_text())
+        self.assertFalse(Path(captured["key"]).exists())
+
+    def test_shell_characters_are_rejected_before_remote_execution(self):
+        result = self.run_transport(image=IMAGE + "'; touch /tmp/injected; '")
+        self.assertNotEqual(result.returncode, 0)
+        self.env["DEPLOY_CONFIG"] = "/opt/chagok/config'; touch /tmp/injected; '"
+        self.assertNotEqual(self.run_transport().returncode, 0)
+        self.assertFalse((self.root / "ssh.json").exists())
+
+    def test_invalid_ports_are_rejected_before_remote_execution(self):
+        for port in ("0", "65536", "abc", "22; echo invalid"):
+            with self.subTest(port=port):
+                self.env["DEPLOY_PORT"] = port
+                self.assertNotEqual(self.run_transport().returncode, 0)
+        self.assertFalse((self.root / "ssh.json").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
