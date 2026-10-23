@@ -55,39 +55,28 @@ function handleSave() {
     </template>
 
     <form class="product-edit" novalidate @submit.prevent="handleSave">
-      <div class="product-edit__identity">
-        <button class="product-edit__image" type="button" disabled title="이미지 업로드 연결 준비 중">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
-            <circle cx="8.5" cy="10" r="1.5" fill="currentColor" />
-            <path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-          </svg>
-          <span>이미지 변경</span>
-        </button>
+      <div class="product-edit__identity-fields">
+        <FormField v-slot="{ fieldId }" label="상품명" required>
+          <TextInput :id="fieldId" v-model="form.name" aria-label="상품명" />
+        </FormField>
 
-        <div class="product-edit__identity-fields">
-          <FormField v-slot="{ fieldId }" label="상품명" required>
-            <TextInput :id="fieldId" v-model="form.name" aria-label="상품명" />
-          </FormField>
+        <FormField v-slot="{ fieldId }" label="상품코드">
+          <TextInput :id="fieldId" :model-value="product.code" readonly aria-label="상품코드" />
+        </FormField>
 
-          <FormField v-slot="{ fieldId }" label="상품코드">
-            <TextInput :id="fieldId" :model-value="product.code" readonly aria-label="상품코드" />
-          </FormField>
+        <FormField v-slot="{ fieldId }" label="카테고리" required>
+          <SelectField
+            :id="fieldId"
+            v-model="form.category"
+            :options="categoryOptions"
+            width="100%"
+            aria-label="카테고리"
+          />
+        </FormField>
 
-          <FormField v-slot="{ fieldId }" label="카테고리" required>
-            <SelectField
-              :id="fieldId"
-              v-model="form.category"
-              :options="categoryOptions"
-              width="100%"
-              aria-label="카테고리"
-            />
-          </FormField>
-
-          <FormField v-slot="{ fieldId }" label="무게">
-            <TextInput :id="fieldId" v-model="form.weight" suffix="g" format-number aria-label="무게" />
-          </FormField>
-        </div>
+        <FormField v-slot="{ fieldId }" label="무게">
+          <TextInput :id="fieldId" v-model="form.weight" suffix="g" format-number aria-label="무게" />
+        </FormField>
       </div>
 
       <FormField label="상품 사이즈 (mm)" required hint="등록된 치수예요. 실제와 다르면 고쳐주세요.">
@@ -134,38 +123,6 @@ function handleSave() {
 .product-edit {
   display: grid;
   gap: 18px;
-}
-
-.product-edit__identity {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 124px minmax(0, 1fr);
-}
-
-.product-edit__image {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  aspect-ratio: 1;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-cream-strong);
-  color: var(--color-brown);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 160ms ease;
-}
-
-.product-edit__image:hover {
-  filter: brightness(0.97);
-}
-
-.product-edit__image svg {
-  width: 28px;
-  height: 28px;
 }
 
 .product-edit__identity-fields {
@@ -215,11 +172,5 @@ function handleSave() {
 
 .product-edit__deactivate:hover {
   text-decoration: underline;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .product-edit__image {
-    transition: none;
-  }
 }
 </style>

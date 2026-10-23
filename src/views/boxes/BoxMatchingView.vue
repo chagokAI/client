@@ -169,11 +169,8 @@ function handleDelete() {
     >
       <template #cell-name="{ row }">
         <div class="product">
-          <span class="product__thumbnail" aria-hidden="true" />
-          <div>
-            <p class="product__name">{{ row.name }}</p>
-            <p class="product__code">{{ row.code }}</p>
-          </div>
+          <p class="product__name">{{ row.name }}</p>
+          <p class="product__code">{{ row.code }}</p>
         </div>
       </template>
 
@@ -255,20 +252,6 @@ function handleDelete() {
 
 .box-matching__sort {
   margin-left: auto;
-}
-
-.product {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.product__thumbnail {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-cream-strong);
 }
 
 .product__name {
