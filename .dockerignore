@@ -1,4 +1,8 @@
 .git
+.github
+scripts
+deploy
+docs
 node_modules
 dist
 .env
