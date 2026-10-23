@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import LiveTwinPanel from '@/components/dashboard/LiveTwinPanel.vue'
-import { warehouseApi } from '@/stores/auth'
+import { auth, warehouseApi } from '@/stores/auth'
+import { apiUrl } from '@/api/client.js'
+import { createInventorySubscription, mergeInventory } from '@/live/stream.js'
 import { ORDER, currency, localDate, number, time } from '@/api/format'
 import { orderRow } from '@/api/rows'
 import { useRemote } from '@/composables/useRemote'
@@ -16,6 +18,10 @@ const { loading, error, load } = useRemote()
 const data = ref(null)
 const orders = ref(null)
 const loadedAt = ref(null)
+const stockLoadedAt = ref(null)
+const stockState = ref('connecting')
+const stockError = ref('')
+let stockStream
 
 const today = localDate(),
   [year, month] = today.split('-').map(Number)
@@ -32,13 +38,40 @@ function refresh() {
         }),
       ]),
     ([dashboard, page]) => {
-      data.value = dashboard.data
+      // 발주·예측 새로고침은 라이브 재고의 값과 기준 시각을 바꾸지 않는다.
+      const previous = data.value
+      data.value = previous
+        ? { ...dashboard.data, inventory: previous.inventory, stockBySize: previous.stockBySize }
+        : dashboard.data
+      if (!previous) stockLoadedAt.value = new Date()
       orders.value = page.data
       loadedAt.value = new Date()
     },
   )
 }
-onMounted(refresh)
+onMounted(() => {
+  refresh()
+  stockStream = createInventorySubscription(
+    apiUrl(`/warehouses/${auth.warehouseId.value}/live-stream`),
+    (signal) => warehouseApi('/dashboard', { signal }),
+    ({ data: next }) => {
+      data.value = mergeInventory(data.value, next)
+      stockLoadedAt.value = new Date()
+      stockError.value = ''
+    },
+    (cause) => {
+      stockError.value = cause.message
+    },
+    {
+      onState: (value) => {
+        stockState.value = value
+      },
+    },
+  )
+})
+onBeforeUnmount(() => {
+  stockStream?.stop()
+})
 
 // 재고 여유(몇 개월분) = 현재 재고 ÷ 다음 달 예측 사용량. 1.5개월 미만은 부족 주의, 12개월 이상은 과잉으로 봅니다.
 const LOW_MONTHS = 1.5
@@ -176,8 +209,8 @@ const costItems = computed(() => {
         <AppButton
           class="dashboard__refresh"
           :disabled="loading"
-          aria-label="새로고침"
-          title="새로고침"
+          aria-label="발주와 예측 새로고침"
+          title="발주 현황·박스 예측량 새로고침"
           @click="refresh"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -201,8 +234,13 @@ const costItems = computed(() => {
           {{ kpi.value }}<span class="kpi__unit">{{ kpi.unit }}</span>
         </p>
         <p class="kpi__hint">{{ kpi.hint }}</p>
+        <p v-if="kpi.id === 'stock'" class="kpi__hint">
+          {{ stockLoadedAt ? `재고 기준 ${time(stockLoadedAt)}` : '불러오는 중' }}
+          {{ stockState === 'live' ? ' · 자동 갱신 중' : ' · 연결 확인 중' }}
+        </p>
       </div>
     </section>
+    <p v-if="stockError" role="alert">재고 갱신 실패: {{ stockError }} 기존 값과 기준 시각을 유지합니다.</p>
 
     <!-- ② 규격별 재고 vs 예측 + 비용 · 절감 -->
     <div class="dashboard__row dashboard__row--main">

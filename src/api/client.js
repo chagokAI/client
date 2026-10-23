@@ -46,7 +46,7 @@ export function apiUrl(path) {
   return `${baseUrl}${path}`
 }
 
-export async function api(path, { method = 'GET', body, query, signal } = {}) {
+export async function api(path, { method = 'GET', body, query, signal, keepalive = false } = {}) {
   const params = new URLSearchParams()
   Object.entries(query ?? {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') params.set(key, String(value))
@@ -64,6 +64,7 @@ export async function api(path, { method = 'GET', body, query, signal } = {}) {
       credentials: 'include',
       headers,
       signal,
+      keepalive,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch (error) {
