@@ -1,7 +1,11 @@
 <script setup>
 import SelectField from '../common/SelectField.vue'
+import ToggleSwitch from '../common/ToggleSwitch.vue'
 import { computed } from 'vue'
 import { auth } from '@/stores/auth'
+import { useNotificationSetting } from '@/composables/useNotificationSetting'
+
+const { isEnabled: notificationsEnabled, setEnabled: setNotificationsEnabled } = useNotificationSetting()
 
 const currentUser = computed(() => ({
   ...auth.session.value,
@@ -9,9 +13,11 @@ const currentUser = computed(() => ({
   team: auth.session.value?.department ?? '',
   role: { VIEWER: '조회자', OPERATOR: '운영자', ADMIN: '관리자' }[auth.session.value?.role] ?? '',
 }))
-const centerOptions = computed(() =>
-  (auth.session.value?.warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
-)
+// 컨트롤 타워는 서버 센터 목록에 없는 화면 전용 선택지입니다.
+const centerOptions = computed(() => [
+  ...(auth.session.value?.warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
+  { value: 'control-tower', label: '컨트롤 타워' },
+])
 
 defineProps({
   centerId: {
@@ -22,11 +28,7 @@ defineProps({
 
 const emit = defineEmits(['update:centerId', 'select', 'logout'])
 
-const menuItems = [
-  { id: 'profile', label: '내 정보' },
-  { id: 'notifications', label: '알림 설정' },
-  { id: 'password', label: '비밀번호 변경' },
-]
+const menuItems = [{ id: 'profile', label: '내 정보' }]
 </script>
 
 <template>
@@ -59,6 +61,14 @@ const menuItems = [
         <button class="profile-menu__item" type="button" @click="emit('select', item.id)">
           {{ item.label }}
         </button>
+      </li>
+      <li class="profile-menu__setting">
+        <span>알림 받기</span>
+        <ToggleSwitch
+          :model-value="notificationsEnabled"
+          aria-label="알림 받기"
+          @update:model-value="setNotificationsEnabled"
+        />
       </li>
     </ul>
 
@@ -171,6 +181,16 @@ const menuItems = [
 
 .profile-menu__item:hover {
   background: var(--color-cream);
+}
+
+.profile-menu__setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  color: var(--color-text);
+  font-size: 13px;
 }
 
 .profile-menu__footer {
