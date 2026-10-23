@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 
 const props = defineProps({
   // yyyy-mm-dd 형식. 브라우저 기본 날짜 입력이 쓰는 형식입니다.
@@ -23,6 +23,11 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  // 입력 테두리 선에 얹어 보여 줄 이름. (예: '시작일시') 비우면 테두리만 그립니다.
+  label: {
+    type: String,
+    default: '',
+  },
   // 입력 오른쪽에 요일을 함께 보여 줍니다. (예: '(화)')
   showWeekday: {
     type: Boolean,
@@ -31,6 +36,10 @@ const props = defineProps({
 })
 
 defineEmits(['update:modelValue'])
+
+// 테두리 라벨을 <label for>로 묶으려면 입력에 id가 있어야 합니다.
+const autoId = useId()
+const inputId = computed(() => props.id || (props.label ? autoId : ''))
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -42,15 +51,16 @@ const weekday = computed(() => {
 </script>
 
 <template>
-  <div class="date-field">
+  <div class="date-field" :class="{ 'date-field--labeled': label }">
+    <label v-if="label" class="date-field__label" :for="inputId">{{ label }}</label>
     <input
-      :id="id || undefined"
+      :id="inputId || undefined"
       class="date-field__control"
       type="date"
       :value="modelValue"
       :min="min || undefined"
       :max="max || undefined"
-      :aria-label="ariaLabel || undefined"
+      :aria-label="label ? undefined : ariaLabel || undefined"
       @input="$emit('update:modelValue', $event.target.value)"
     />
     <span v-if="showWeekday && weekday" class="date-field__weekday">{{ weekday }}</span>
@@ -63,6 +73,26 @@ const weekday = computed(() => {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* 라벨은 테두리 선 위에 걸쳐 앉습니다. 입력 높이는 그대로 40px이라
+   같은 줄의 다른 입력과 가운데가 맞습니다. */
+.date-field--labeled {
+  position: relative;
+}
+
+.date-field__label {
+  position: absolute;
+  top: -7px;
+  left: 9px;
+  padding: 0 4px;
+  background: var(--color-white);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .date-field__control {

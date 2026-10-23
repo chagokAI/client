@@ -222,7 +222,7 @@ function handleStockInSubmit(form) {
       </template>
     </PageHeader>
 
-    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :error="error" @retry="refresh" />
 
     <StatGrid :stats="inventoryStats" />
 
@@ -237,6 +237,7 @@ function handleStockInSubmit(form) {
       :rows="rows"
       row-key="id"
       min-width="1440px"
+      :loading="loading"
       empty-text="조건에 맞는 규격이 없습니다."
     >
       <template #cell-code="{ row }">

@@ -18,11 +18,16 @@ defineProps({
     type: String,
     default: 'default',
   },
+  // 테두리 없이 한 띠(StatGrid 의 band) 안에 넣을 때 사용합니다.
+  flush: {
+    type: Boolean,
+    default: false,
+  },
 })
 </script>
 
 <template>
-  <article class="stat-card">
+  <article class="stat-card" :class="{ 'stat-card--flush': flush }">
     <p class="stat-card__label">{{ label }}</p>
     <p class="stat-card__value" :class="`stat-card__value--${tone}`">{{ value }}</p>
     <p v-if="hint || $slots.hint" class="stat-card__hint">
@@ -38,6 +43,18 @@ defineProps({
   border-radius: var(--radius-lg);
   background: var(--color-white);
   box-shadow: var(--shadow-card);
+}
+
+/* 띠 안에서는 테두리를 바깥 한 줄에 맡기고, 숫자를 한 단계 키워 먼저 읽히게 합니다. */
+.stat-card--flush {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stat-card--flush .stat-card__value {
+  font-size: 28px;
 }
 
 .stat-card__label {

@@ -33,8 +33,8 @@ const orders = ref([]),
   toastMessage = ref('')
 const historyPeriod = computed(() => `조회 기간 ${from.value} – ${to.value}`)
 const historySortOptions = [
-  { value: 'ordered-desc', label: '최신 발주일 순' },
-  { value: 'ordered-asc', label: '오래된 발주일 순' },
+  { value: 'ordered-desc', label: '최신순' },
+  { value: 'ordered-asc', label: '오래된순' },
   { value: 'amount-desc', label: '발주 금액 높은 순' },
 ]
 const columns = [
@@ -49,9 +49,11 @@ const columns = [
   { key: 'detail', label: '상세보기', width: '8%' },
 ]
 const rows = computed(() => orders.value)
+// 이력에서 자주 찾는 상태만 칩으로 둡니다. 나머지 상태는 표의 [상태] 열에서 확인합니다.
+const HISTORY_STATUSES = ['APPROVED', 'RECEIVED']
 const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
-  ...Object.entries(ORDER).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
+  ...HISTORY_STATUSES.map((value) => ({ value, label: ORDER[value], count: counts.value[value] ?? 0 })),
 ])
 const stats = computed(() => [
   {
@@ -70,7 +72,7 @@ const stats = computed(() => [
     id: 'in-progress',
     label: '진행 중 발주',
     value: `${number(summary.value?.inProgressCount)}건`,
-    hint: '승인 완료 · 배송 중',
+    hint: '승인 완료',
   },
   {
     id: 'lead',
@@ -122,30 +124,42 @@ async function openDetail(row) {
 
 <template>
   <div class="purchase-order-history">
-    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :error="error" @retry="refresh" />
     <PageHeader
       title="발주서 이력 관리"
       description="승인된 발주서와 납품 진행 상태를 한눈에 확인하고 관리합니다."
       :meta="historyPeriod"
     />
 
-    <StatGrid :stats="stats" />
+    <StatGrid :stats="stats" band />
 
     <FilterBar>
-      <DateField v-model="from" :max="to" aria-label="조회 시작일" />
-      <DateField v-model="to" :min="from" aria-label="조회 종료일" />
+      <div class="purchase-order-history__range">
+        <DateField v-model="from" :max="to" label="시작일시" />
+        <span class="purchase-order-history__range-dash" aria-hidden="true">–</span>
+        <DateField v-model="to" :min="from" label="종료일시" />
+      </div>
       <SearchInput v-model="keyword" width="320px" placeholder="발주번호, 공급사로 검색" aria-label="발주서 검색" />
-      <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="발주서 상태" />
-      <SelectField
-        v-model="sort"
-        class="purchase-order-history__sort"
-        :options="historySortOptions"
-        width="160px"
-        aria-label="정렬 기준"
-      />
+
+      <template #second>
+        <FilterChips v-model="statusFilter" :options="statusOptions" aria-label="발주서 상태" />
+        <SelectField
+          v-model="sort"
+          class="purchase-order-history__sort"
+          :options="historySortOptions"
+          width="160px"
+          aria-label="정렬 기준"
+        />
+      </template>
     </FilterBar>
 
-    <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 발주서가 없습니다.">
+    <DataTable
+      :columns="columns"
+      :rows="rows"
+      row-key="id"
+      :loading="loading"
+      empty-text="조건에 맞는 발주서가 없습니다."
+    >
       <template #cell-number="{ row }">
         <button class="order-number" type="button" @click="openDetail(row)">{{ row.number }}</button>
       </template>
@@ -165,11 +179,6 @@ async function openDetail(row) {
 
     <Pagination v-model="page" class="purchase-order-history__pagination" :total-pages="totalPages" />
 
-    <p class="purchase-order-history__note">
-      발주번호를 누르거나 [상세]를 선택하면 규격별 수량·단가와 승인 이력을 확인할 수 있습니다. 서버에 저장된 승인 및
-      입고 정보를 표시합니다.
-    </p>
-
     <PurchaseOrderDetailModal v-if="openedDetail" :detail="openedDetail" @close="openedDetail = null" />
 
     <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
@@ -179,6 +188,18 @@ async function openDetail(row) {
 <style scoped>
 .purchase-order-history__sort {
   margin-left: auto;
+}
+
+/* 조회 기간: 시작·종료 입력을 줄표로 묶어 한 덩어리로 보여 줍니다. */
+.purchase-order-history__range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.purchase-order-history__range-dash {
+  color: var(--color-text-muted);
+  font-size: 13px;
 }
 
 .order-number {

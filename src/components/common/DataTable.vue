@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   // { key, label, width, align } 형태의 배열
   columns: {
     type: Array,
@@ -27,7 +29,23 @@ defineProps({
     type: String,
     default: '표시할 데이터가 없습니다.',
   },
+  // 조회하는 동안 내용 대신 자리 표시줄을 보여 줍니다. 표 높이가 그대로라 화면이 흔들리지 않습니다.
+  loading: {
+    type: Boolean,
+    default: false,
+  },
+  // 보여 줄 데이터가 아직 없을 때 그릴 자리 표시줄 줄 수입니다.
+  skeletonRows: {
+    type: Number,
+    default: 5,
+  },
 })
+
+// 이미 보고 있던 줄 수를 그대로 유지해, 조회 전후로 표 높이가 바뀌지 않게 합니다.
+const skeletonCount = computed(() => props.rows.length || props.skeletonRows)
+
+// 칸마다 길이를 달리해야 실제 내용처럼 보입니다.
+const SKELETON_WIDTHS = ['72%', '54%', '86%', '62%', '78%', '48%']
 </script>
 
 <template>
@@ -45,7 +63,18 @@ defineProps({
         </tr>
       </thead>
 
-      <tbody>
+      <tbody v-if="loading" aria-busy="true">
+        <tr v-for="line in skeletonCount" :key="`skeleton-${line}`">
+          <td v-for="(column, columnIndex) in columns" :key="column.key">
+            <span
+              class="data-table__skeleton"
+              :style="{ width: SKELETON_WIDTHS[columnIndex % SKELETON_WIDTHS.length] }"
+            />
+          </td>
+        </tr>
+      </tbody>
+
+      <tbody v-else>
         <tr v-if="!rows.length">
           <td class="data-table__empty" :colspan="columns.length">{{ emptyText }}</td>
         </tr>
@@ -146,6 +175,33 @@ defineProps({
 
 .data-table__row--highlight td {
   background: #fffaf2;
+}
+
+/* 조회 중 자리 표시줄. inline-block 이라 줄 높이가 실제 내용과 같습니다. */
+.data-table__skeleton {
+  display: inline-block;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-divider) 25%, var(--color-cream-strong) 37%, var(--color-divider) 63%);
+  background-size: 400% 100%;
+  vertical-align: middle;
+  animation: data-table-shimmer 1.4s ease infinite;
+}
+
+@keyframes data-table-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+
+  to {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table__skeleton {
+    animation: none;
+  }
 }
 
 .data-table__empty {

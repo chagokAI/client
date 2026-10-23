@@ -137,7 +137,7 @@ function handleDelete() {
   <div class="box-matching">
     <PageHeader title="물품-박스 매칭 현황" description="상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다." />
 
-    <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :error="error" @retry="refresh" />
     <FilterBar>
       <div class="box-matching__search">
         <SelectField v-model="searchField" :options="productSearchFields" width="110px" aria-label="검색 기준" />
@@ -162,7 +162,13 @@ function handleDelete() {
       />
     </FilterBar>
 
-    <DataTable :columns="columns" :rows="rows" row-key="id" empty-text="조건에 맞는 상품이 없습니다.">
+    <DataTable
+      :columns="columns"
+      :rows="rows"
+      row-key="id"
+      :loading="loading"
+      empty-text="조건에 맞는 상품이 없습니다."
+    >
       <template #cell-name="{ row }">
         <div class="product">
           <span class="product__thumbnail" aria-hidden="true" />
@@ -229,7 +235,7 @@ function handleDelete() {
   gap: 0;
   flex: 1;
   min-width: 280px;
-  max-width: 420px;
+  max-width: 520px;
 }
 
 .box-matching__search :deep(.select-field__control) {
@@ -237,7 +243,13 @@ function handleDelete() {
   border-bottom-right-radius: 0;
 }
 
+/* 검색 기준 선택과 입력창을 한 덩어리처럼 붙여 보여 줍니다. ([검색] 버튼은 떨어뜨립니다) */
 .box-matching__keyword {
+  flex: 1;
+  min-width: 0;
+}
+
+.box-matching__keyword :deep(.search-input__control) {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left: 0;
