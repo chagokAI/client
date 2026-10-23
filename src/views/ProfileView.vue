@@ -6,7 +6,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { auth } from '@/stores/auth'
 
 // 계정 정보는 로그인 세션(/auth/me) 값을 그대로 보여 줍니다. 수정 API가 없어 조회 전용입니다.
-const ROLE = { VIEWER: '조회자', OPERATOR: '운영자', ADMIN: '관리자' }
+const ROLE = { VIEWER: '조회자', OPERATOR: '운영자', DIRECTOR: '관리자' }
 
 const user = computed(() => auth.session.value ?? {})
 const role = computed(() => ROLE[user.value.role] ?? user.value.role ?? '—')

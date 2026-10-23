@@ -1,7 +1,26 @@
 <script setup>
+import { onMounted, ref } from 'vue'
+import { api } from '@/api/client'
+import ApiState from '@/components/common/ApiState.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import CenterMap from '@/components/admin/CenterMap.vue'
+import { useRemote } from '@/composables/useRemote'
+
+// 센터 위치: 좌표가 등록된 센터만 지도에 핀으로 찍습니다.
+const { loading, error, load } = useRemote()
+const centers = ref([])
+
+function refresh() {
+  return load(
+    (signal) => api('/admin/warehouses', { signal }),
+    (response) => {
+      centers.value = response.data
+    },
+  )
+}
+onMounted(refresh)
 
 // TODO: 아래 두 목록은 레이아웃 확인용 예시입니다. 센터 통합 지표 API가 준비되면 교체합니다.
 // 매출: 센터별로 '무엇이 얼마나 좋아졌는지'를 한 줄씩 보여 줍니다.
@@ -33,12 +52,11 @@ const issues = [
       description="전체 센터의 운영 성과와 조치가 필요한 항목을 한곳에서 확인합니다."
     />
 
+    <ApiState :loading="loading" :error="error" @retry="refresh" />
+
     <div class="admin-dashboard__columns">
       <AppCard class="admin-dashboard__map" title="센터 위치" :padded="false">
-        <div class="map-placeholder">
-          <p class="map-placeholder__title">지도를 준비하고 있어요.</p>
-          <p class="map-placeholder__text">센터 위치와 센터별 상태를 지도 위에 표시할 예정입니다.</p>
-        </div>
+        <CenterMap :centers="centers" />
       </AppCard>
 
       <div class="admin-dashboard__side">
@@ -124,32 +142,15 @@ const issues = [
   }
 }
 
-/* 지도가 들어올 자리. 실제 지도를 붙일 때 이 블록만 바꿉니다. */
-.map-placeholder {
+/* 지도가 카드 본문 높이를 모두 채우도록 본문을 세로 flex로 둡니다. */
+.admin-dashboard__map :deep(.app-card__body) {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 100%;
-  min-height: 320px;
-  background: var(--color-cream-soft);
-  text-align: center;
 }
 
-.map-placeholder__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.map-placeholder__text {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: keep-all;
+.admin-dashboard__map :deep(.center-map) {
+  flex: 1;
+  height: auto;
 }
 
 .performance,
