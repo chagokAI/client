@@ -1,9 +1,11 @@
+import fcntl
 import json
 import os
 from pathlib import Path
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -16,7 +18,7 @@ ROLLBACK = "chagok-client-rollback:" + "a" * 64
 # Simulate Docker and HTTP boundaries while running the real deployment script.
 # Failures happen after the service changes, so the tests exercise restoration.
 FAKE_TOOL = r'''#!/usr/bin/env python3
-import json, os, pathlib, re, sys
+import json, os, pathlib, re, sys, time
 root = pathlib.Path(os.environ["MOCK_ROOT"])
 state_file = root / "docker.json"
 state = json.loads(state_file.read_text())
@@ -28,8 +30,6 @@ def save():
     state_file.write_text(json.dumps(state))
 def fail():
     sys.exit(1)
-if tool == "flock":
-    sys.exit(1 if state.get("locked") else 0)
 if tool == "curl":
     url = args[-1]
     if url.endswith("/healthz"):
@@ -60,11 +60,21 @@ elif args[0] == "inspect":
 elif args[0] == "pull":
     if state.get("bad_pull"):
         fail()
+    if state.get("pause_pull"):
+        (root / "pull-started").touch()
+        deadline = time.monotonic() + 5
+        while not (root / "continue-pull").exists():
+            if time.monotonic() > deadline:
+                fail()
+            time.sleep(0.02)
 elif args[:2] == ["image", "inspect"]:
     print(state["images"][args[-1]])
 elif args[:2] == ["image", "tag"]:
     state["images"][args[-1]] = args[-2]
     save()
+elif args[0] == "run":
+    if state.get("bad_preflight"):
+        fail()
 else:
     fail()
 '''
@@ -79,7 +89,7 @@ class DeploymentTests(unittest.TestCase):
         self.bin.mkdir()
         self.deploy_state = self.root / "releases"
         self.deploy_state.mkdir()
-        for tool in ("docker", "curl", "flock"):
+        for tool in ("docker", "curl"):
             path = self.bin / tool
             path.write_text(FAKE_TOOL)
             path.chmod(0o755)
@@ -147,6 +157,15 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.up_commands(), [])
         self.assertFalse((self.deploy_state / "frontend.image.yaml").exists())
 
+    def test_native_nginx_failure_leaves_running_service_untouched(self):
+        self.state["bad_preflight"] = True
+        self.save()
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current(), OLD_ID)
+        self.assertEqual(self.up_commands(), [])
+        self.assertFalse((self.deploy_state / "frontend.image.yaml").exists())
+
     def test_unhealthy_new_container_restores_old_image(self):
         self.state["bad_start"] = True
         self.save()
@@ -206,12 +225,41 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.up_commands(), [])
 
     def test_server_lock_blocks_overlapping_deployments(self):
-        self.state["locked"] = True
-        self.save()
-        result = self.run_deploy()
+        with (self.deploy_state / "deploy.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.run_deploy()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("already running", result.stderr)
         self.assertFalse(any(cmd[0] == "docker" for cmd in self.commands()))
+
+    def test_lock_is_held_until_shell_finishes_and_released_after_exit(self):
+        self.state["pause_pull"] = True
+        self.save()
+        process = subprocess.Popen(
+            ["bash", str(SCRIPT), "deploy", IMAGE, str(self.config)],
+            env={**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "MOCK_ROOT": str(self.root)},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while not (self.root / "pull-started").exists():
+                self.assertIsNone(process.poll(), "Deployment exited before the lock probe")
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+            with (self.deploy_state / "deploy.lock").open("w") as lock:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            (self.root / "continue-pull").touch()
+            stdout, stderr = process.communicate(timeout=10)
+            self.assertEqual(process.returncode, 0, stdout + stderr)
+            with (self.deploy_state / "deploy.lock").open("w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
 
     def test_failed_release_preserves_previous_successful_release_records(self):
         self.assertEqual(self.run_deploy().returncode, 0)

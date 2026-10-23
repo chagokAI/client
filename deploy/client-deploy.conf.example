@@ -1,14 +1,18 @@
-# Copy to /opt/chagok/client-deploy.conf on the server and edit its absolute paths.
+# Verified server: local SSH alias `choi` -> apple@chagok.cloud (macOS / ARM64).
+# Copy to /Users/apple/deploy/chagok-migration-20261021/client-deploy.conf on that server.
 # This is a trusted Bash file, read by scripts/deploy-client.sh.
-COMPOSE_PROJECT_DIRECTORY=/opt/chagok
+COMPOSE_PROJECT_DIRECTORY=/Users/apple/deploy/chagok-migration-20261021/chagok
 COMPOSE_PROJECT_NAME=chagok-stack
-COMPOSE_FILES=(/opt/chagok/compose.yaml)
-COMPOSE_ENV_FILE=/opt/chagok/.env
-DEPLOY_STATE_DIR=/opt/chagok/.client-deploy
+COMPOSE_FILES=(
+  "$COMPOSE_PROJECT_DIRECTORY/compose.yaml"
+  "$COMPOSE_PROJECT_DIRECTORY/compose.production.yaml"
+)
+COMPOSE_ENV_FILE="$COMPOSE_PROJECT_DIRECTORY/.env"
+DEPLOY_STATE_DIR="$COMPOSE_PROJECT_DIRECTORY/.client-deploy"
 IMAGE_REPOSITORY=ghcr.io/chagokai/client
-SMOKE_BASE_URL=http://127.0.0.1:8080
-# Set to the external HTTPS origin to also verify the public proxy and TLS route.
-PUBLIC_BASE_URL=
+SMOKE_BASE_URL=http://127.0.0.1:18081
+# Also verify the existing public HTTPS proxy.
+PUBLIC_BASE_URL=https://chagok.cloud
 HEALTH_TIMEOUT=90
 HTTP_ATTEMPTS=6
 HTTP_RETRY_DELAY=2

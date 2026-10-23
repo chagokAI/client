@@ -5,7 +5,7 @@ umask 077
 die() { echo "ERROR: $*" >&2; exit 1; }
 mode=${1:-}
 image=${2:-}
-config=${3:-/opt/chagok/client-deploy.conf}
+config=${3:?Set the absolute server configuration path as the third argument}
 [[ "$mode" == deploy || "$mode" == rollback ]] || die 'Use: deploy IMAGE CONFIG | rollback "" CONFIG'
 [ -f "$config" ] || die "Deployment config not found: $config"
 
@@ -25,11 +25,18 @@ http_retry_delay=${HTTP_RETRY_DELAY:-2}
 [[ "$COMPOSE_PROJECT_DIRECTORY" = /* && "$DEPLOY_STATE_DIR" = /* ]] || die 'Use absolute server paths'
 [ -d "$COMPOSE_PROJECT_DIRECTORY" ] || die 'Compose project directory does not exist'
 [ "${#COMPOSE_FILES[@]}" -gt 0 ] || die 'Set COMPOSE_FILES to a Bash array of absolute Compose paths'
-for command in docker curl python3 flock; do command -v "$command" >/dev/null || die "Missing $command"; done
+for command in docker curl python3; do command -v "$command" >/dev/null || die "Missing $command"; done
 
 mkdir -p "$DEPLOY_STATE_DIR"
 exec 9> "$DEPLOY_STATE_DIR/deploy.lock"
-flock -n 9 || die 'Another frontend deployment is already running'
+# Lock the inherited file description. Bash keeps fd 9 open for the entire run.
+# Python's standard-library flock works on both macOS and Linux without a CLI package.
+python3 -c 'import fcntl, sys
+try:
+    fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    sys.exit(1)
+' || die 'Another frontend deployment is already running'
 
 compose=(docker compose --project-directory "$COMPOSE_PROJECT_DIRECTORY" --project-name "$COMPOSE_PROJECT_NAME")
 if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
@@ -90,6 +97,8 @@ if [ "$next_image_id" = "$old_image_id" ]; then
   exit 0
 fi
 
+# Execute Nginx on the target machine before replacing its running frontend.
+docker run --rm --entrypoint nginx "$image" -t
 docker image tag "$old_image_id" "$rollback_image"
 old_current_record=''
 old_previous_record=''

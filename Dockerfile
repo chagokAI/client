@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM node:24-alpine AS build
+# Vite outputs platform-independent browser assets; build them on the runner's CPU.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci

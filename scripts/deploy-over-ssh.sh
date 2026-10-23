@@ -4,7 +4,7 @@ set -Eeuo pipefail
 die() { echo "ERROR: $*" >&2; exit 1; }
 mode=${1:?Usage: bash scripts/deploy-over-ssh.sh deploy IMAGE | rollback}
 image=${2:-}
-config=${DEPLOY_CONFIG:-/opt/chagok/client-deploy.conf}
+config=${DEPLOY_CONFIG:?Set DEPLOY_CONFIG to the absolute server configuration path}
 port=${DEPLOY_PORT:-22}
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
