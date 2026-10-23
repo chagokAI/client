@@ -6,6 +6,7 @@ import ProfileMenu from './ProfileMenu.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import { auth, warehouseApi } from '@/stores/auth'
 import { notificationRow } from '@/api/rows'
+import { useNotificationSetting } from '@/composables/useNotificationSetting'
 import { useSidebar } from '@/composables/useSidebar'
 
 const { isCollapsed, isMobileOpen, toggle, expand, openMobile, closeMobile } = useSidebar()
@@ -79,6 +80,9 @@ watch(
 
 const notifications = ref([])
 const unreadCount = ref(0)
+// 알림을 끄면 벨의 안 읽은 건수 배지를 숨깁니다. 벨을 눌러 목록을 보는 것은 그대로 됩니다.
+const { isEnabled: notificationsEnabled } = useNotificationSetting()
+const visibleUnreadCount = computed(() => (notificationsEnabled.value ? unreadCount.value : 0))
 const toastMessage = ref('')
 const isPanelOpen = ref(false)
 const isProfileOpen = ref(false)
@@ -129,9 +133,11 @@ function toggleProfile() {
   isProfileOpen.value = !isProfileOpen.value
 }
 
-function handleProfileSelect() {
+const PROFILE_ROUTES = { profile: '/profile' }
+
+function handleProfileSelect(id) {
   isProfileOpen.value = false
-  // TODO: 내 정보 · 알림 설정 · 비밀번호 변경 화면이 생기면 해당 경로로 이동시킵니다.
+  if (PROFILE_ROUTES[id]) router.push(PROFILE_ROUTES[id])
 }
 
 async function handleLogout() {
@@ -279,7 +285,7 @@ onBeforeUnmount(() => {
           <button
             class="sidebar__action"
             type="button"
-            :aria-label="unreadCount ? `알림 ${unreadCount}건` : '알림'"
+            :aria-label="visibleUnreadCount ? `알림 ${visibleUnreadCount}건` : '알림'"
             :aria-expanded="isPanelOpen"
             :title="isCollapsed ? '알림' : null"
             @click="toggleNotifications"
@@ -294,7 +300,7 @@ onBeforeUnmount(() => {
                   stroke-linejoin="round"
                 />
               </svg>
-              <span v-if="unreadCount" class="sidebar__badge">{{ unreadCount }}</span>
+              <span v-if="visibleUnreadCount" class="sidebar__badge">{{ visibleUnreadCount }}</span>
             </span>
             <span class="sidebar__label">알림</span>
           </button>
@@ -319,7 +325,7 @@ onBeforeUnmount(() => {
             @click="toggleProfile"
           >
             <span class="sidebar__avatar" />
-            <span class="sidebar__label sidebar__label--name">{{ currentUser.name }}</span>
+            <span class="sidebar__label sidebar__label--name">안녕하세요, 센터장님</span>
           </button>
 
           <div v-if="isProfileOpen" class="sidebar__panel">
@@ -570,8 +576,13 @@ onBeforeUnmount(() => {
 .sidebar__panel {
   position: absolute;
   bottom: 0;
-  left: calc(100% + 10px);
+  /* 사이드바 좌우 여백만큼 밀어 패널 왼쪽 끝을 네이비 경계에 맞춥니다. */
+  left: calc(100% + 12px);
   z-index: 70;
+}
+
+.sidebar--collapsed .sidebar__panel {
+  left: calc(100% + 10px);
 }
 
 .sidebar__scrim,
@@ -623,7 +634,8 @@ onBeforeUnmount(() => {
     display: none;
   }
 
-  .sidebar__panel {
+  .sidebar__panel,
+  .sidebar--collapsed .sidebar__panel {
     bottom: calc(100% + 10px);
     left: 0;
   }
