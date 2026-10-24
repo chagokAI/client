@@ -6,6 +6,7 @@ import {
   createInventorySubscription,
   mergeInventory,
   mergeStockBoxes,
+  snapshotResetsScene,
 } from '../src/live/stream.js'
 
 class Source {
@@ -65,6 +66,17 @@ test('inventory merging leaves forecasts and costs unchanged', () => {
   assert.deepEqual(next.stockBySize, ['new'])
   assert.equal(next.demandForecast, old.demandForecast)
   assert.equal(next.currentMonthCost, 42)
+})
+
+test('only connection and live-reset snapshots clear the live scene; receipts update stock in place', () => {
+  const boxes = [{ id: 'a' }, { id: 'b' }]
+  assert.equal(snapshotResetsScene(boxes, { reason: 'connect', boxes }), true)
+  assert.equal(snapshotResetsScene(boxes, { reason: 'reset', boxes }), true)
+  assert.equal(snapshotResetsScene(boxes, { reason: 'stock', boxes: [{ id: 'b' }, { id: 'a' }] }), false)
+  // 박스가 추가·비활성화되면 진열대 구성이 달라지므로 다시 그린다.
+  assert.equal(snapshotResetsScene(boxes, { reason: 'stock', boxes: [{ id: 'a' }] }), true)
+  // 사유가 없는 이전 서버의 snapshot은 종전처럼 장면을 다시 그린다.
+  assert.equal(snapshotResetsScene(boxes, { boxes }), true)
 })
 
 test('a delayed packed event cannot overwrite newer stock from a reset or receipt', () => {

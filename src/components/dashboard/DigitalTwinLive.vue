@@ -4,7 +4,7 @@ import { World } from '@/digital-twin/scene.js'
 import { apiUrl } from '@/api/client.js'
 import { auth } from '@/stores/auth.js'
 import { warehouseApi } from '@/stores/auth.js'
-import { createLiveSubscription, mergeStockBoxes } from '@/live/stream.js'
+import { createLiveSubscription, mergeStockBoxes, snapshotResetsScene } from '@/live/stream.js'
 import { createLiveTruckFlow } from '@/live/trucks.js'
 import { TRUCK_MM } from '@/digital-twin/packing.js'
 import { createLiveInputControl } from '@/live/input.js'
@@ -71,10 +71,13 @@ function resetScene() {
 function receive(name, item) {
   if (name === 'snapshot') {
     // 다시 연결한 현재고를 기준으로 장면을 시작한다. 놓친 포장 애니메이션은 만들어 내지 않는다.
+    const resets = snapshotResetsScene(boxes.value, item)
     boxes.value = mergeStockBoxes(boxes.value, item.boxes).filter((box) =>
       item.boxes.some((next) => next.id === box.id),
     )
-    resetScene()
+    // 입고·실사 snapshot은 적재 중인 트럭과 대기 물품을 지우지 않고 진열대 숫자만 바꾼다.
+    if (resets) resetScene()
+    else world.setRackStock(Object.fromEntries(boxes.value.map((box) => [box.code, box.onHandQty])))
     return
   }
   counts.value[name]++

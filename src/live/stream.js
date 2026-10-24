@@ -71,6 +71,13 @@ export function mergeInventory(current, next) {
   return { ...current, inventory: next.inventory, stockBySize: next.stockBySize }
 }
 
+// 연결 직후·라이브 초기화의 snapshot만 장면을 비운다. 입고·실사는 진열대 숫자만 바꾸고 적재 중인 트럭을 유지한다.
+export function snapshotResetsScene(currentBoxes, snapshot) {
+  if (snapshot.reason !== 'stock') return true
+  const ids = new Set(currentBoxes.map((box) => box.id))
+  return snapshot.boxes.length !== ids.size || snapshot.boxes.some((box) => !ids.has(box.id))
+}
+
 // 재고는 증감 계산하지 않고 서버 버전을 따른다. 늦게 도착한 이벤트는 최신 입고·초기화를 되돌릴 수 없다.
 export function mergeStockBoxes(current, incoming) {
   const boxes = new Map(current.map((box) => [box.id, box]))

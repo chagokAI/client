@@ -357,6 +357,16 @@ export class World {
     line.trucks.slice(0, -1).forEach((truck, i) => truck.group.position.copy(line._parkSlot(i)))
   }
 
+  /** 장면을 유지한 채 진열대 재고 숫자만 서버 값으로 맞춘다(라이브의 입고·실사 snapshot). */
+  setRackStock(stockByCode) {
+    for (const line of this.lines)
+      for (const [code, it] of Object.entries(line.rack?.items ?? {})) {
+        if (!(code in stockByCode)) continue
+        it.stock = stockByCode[code]
+        line._relabel(code, it)
+      }
+  }
+
   _tick() {
     const dt = Math.min(this.clock.getDelta(), 0.1)
     for (const f of this.flights) {
