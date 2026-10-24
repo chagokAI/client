@@ -68,6 +68,10 @@ test('inventory merging leaves forecasts and costs unchanged', () => {
   assert.equal(next.currentMonthCost, 42)
 })
 
+test('a stock update that arrives before the first dashboard load does not create a partial dashboard', () => {
+  assert.equal(mergeInventory(null, { inventory: 9, stockBySize: ['new'] }), null)
+})
+
 test('only connection and live-reset snapshots clear the live scene; receipts update stock in place', () => {
   const boxes = [{ id: 'a' }, { id: 'b' }]
   assert.equal(snapshotResetsScene(boxes, { reason: 'connect', boxes }), true)

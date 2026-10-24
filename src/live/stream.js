@@ -67,7 +67,9 @@ export function createLiveSubscription(
   }
 }
 
+// 첫 대시보드 조회 전에 도착한 재고는 버린다. 조회 결과가 같은 시점 이후의 재고를 가져온다.
 export function mergeInventory(current, next) {
+  if (!current) return current
   return { ...current, inventory: next.inventory, stockBySize: next.stockBySize }
 }
 
