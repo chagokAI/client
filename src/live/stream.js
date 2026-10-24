@@ -90,7 +90,7 @@ export function mergeStockBoxes(current, incoming) {
   return [...boxes.values()]
 }
 
-export function createInventoryRefresh(fetcher, accept, failed, { delayMs = 2000 } = {}) {
+export function createInventoryRefresh(fetcher, accept, failed, { delayMs = 500 } = {}) {
   let last = -Infinity
   let timer = null
   let running = false
@@ -137,7 +137,14 @@ export function createInventoryRefresh(fetcher, accept, failed, { delayMs = 2000
 // 재고는 화면 진입부터 자동으로 구독한다. 이탈 시 연결과 대기 중인 조회를 한 수명으로 종료한다.
 export function createInventorySubscription(url, fetcher, accept, failed, options) {
   const refresh = createInventoryRefresh(fetcher, accept, failed)
-  const stream = createLiveSubscription(url, () => refresh.request(), options)
+  const stream = createLiveSubscription(
+    url,
+    (name) => {
+      // 대기·실패는 재고를 바꾸지 않으므로 전체 대시보드를 다시 조회하지 않는다.
+      if (name === 'snapshot' || name === 'packed') refresh.request()
+    },
+    options,
+  )
   stream.start()
   return {
     stop() {

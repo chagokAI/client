@@ -110,7 +110,7 @@ test('a CLOSED connection retries after ten seconds and pause cancels the pendin
   assert.equal(failed.closed, true)
 })
 
-test('inventory events coalesce within two seconds and failures retain the last value', async (t) => {
+test('inventory events coalesce within half a second and failures retain the last value', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 })
   let calls = 0
   let value = 100
@@ -136,7 +136,7 @@ test('inventory events coalesce within two seconds and failures retain the last 
   assert.equal(value, 99)
   refresh.request()
   refresh.request()
-  t.mock.timers.tick(1999)
+  t.mock.timers.tick(499)
   assert.equal(calls, 1)
   t.mock.timers.tick(1)
   await new Promise((resolve) => queueMicrotask(resolve))
@@ -147,6 +147,89 @@ test('inventory events coalesce within two seconds and failures retain the last 
   refresh.request()
   t.mock.timers.tick(3000)
   assert.equal(calls, 2)
+})
+
+test('slow inventory requests never overlap and coalesce pending events into one latest fetch', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 })
+  let calls = 0
+  let finish
+  const values = []
+  const refresh = createInventoryRefresh(
+    () => {
+      calls++
+      return calls === 1 ? new Promise((resolve) => (finish = resolve)) : Promise.resolve(98)
+    },
+    (next) => values.push(next),
+    (error) => assert.fail(error),
+  )
+  refresh.request()
+  t.mock.timers.tick(0)
+  refresh.request()
+  refresh.request()
+  t.mock.timers.tick(1500)
+  assert.equal(calls, 1, 'events must not start another request while the first is running')
+  finish(99)
+  await new Promise((resolve) => queueMicrotask(resolve))
+  t.mock.timers.tick(0)
+  await new Promise((resolve) => queueMicrotask(resolve))
+  assert.equal(calls, 2)
+  assert.deepEqual(values, [99, 98])
+  t.mock.timers.tick(1000)
+  assert.equal(calls, 2, 'the coalesced events must not leave extra requests queued')
+  refresh.stop()
+})
+
+test('waiting and failed events do not fetch inventory; packed events refresh at most twice a second', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 })
+  let calls = 0
+  const updates = createInventorySubscription(
+    '/live',
+    async () => ++calls,
+    () => {},
+    (error) => assert.fail(error),
+    { EventSourceImpl: Source },
+  )
+  const source = Source.instances.at(-1)
+  source.emit('waiting', { eventId: 'waiting' })
+  source.emit('failed', { eventId: 'failed' })
+  t.mock.timers.tick(1000)
+  assert.equal(calls, 0)
+  source.emit('snapshot', { boxes: [] })
+  t.mock.timers.tick(0)
+  await new Promise((resolve) => queueMicrotask(resolve))
+  assert.equal(calls, 1)
+  source.emit('packed', { eventId: 'first' })
+  source.emit('packed', { eventId: 'second' })
+  t.mock.timers.tick(499)
+  assert.equal(calls, 1)
+  t.mock.timers.tick(1)
+  await new Promise((resolve) => queueMicrotask(resolve))
+  assert.equal(calls, 2)
+  updates.stop()
+})
+
+test('leaving aborts an in-flight inventory request and ignores its late response', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 })
+  let signal
+  let finish
+  const values = []
+  const refresh = createInventoryRefresh(
+    (requestSignal) => {
+      signal = requestSignal
+      return new Promise((resolve) => (finish = resolve))
+    },
+    (next) => values.push(next),
+    (error) => assert.fail(error),
+  )
+  refresh.request()
+  t.mock.timers.tick(0)
+  refresh.request()
+  refresh.stop()
+  assert.equal(signal.aborted, true)
+  finish(99)
+  await new Promise((resolve) => queueMicrotask(resolve))
+  t.mock.timers.tick(1000)
+  assert.deepEqual(values, [])
 })
 
 test('inventory subscribes automatically and leaving cancels both the stream and queued updates', async (t) => {
