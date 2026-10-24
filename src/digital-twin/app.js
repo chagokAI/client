@@ -1,6 +1,7 @@
 import { warehouseApi } from '@/stores/auth'
 import { World, MiniView, fillColor } from './scene.js'
 import { TRUCK_MM, simulate, vol } from './packing.js'
+import { playbackTiming } from './playback.js'
 
 /**
  * 물류공간 디지털트윈 화면을 root 안에 붙인다. 반환값을 부르면 타이머·3D 자원·이벤트를 정리한다.
@@ -12,7 +13,8 @@ import { TRUCK_MM, simulate, vol } from './packing.js'
  * - 기존 라인: 지금 보유한 박스만으로 고른다.
  * - 제안 라인: 보유 박스에 제안서의 신규 규격을 더해, 들어가는 박스 중 충전율이 가장 높은 것을 고른다.
  */
-export function mountTwin(root) {
+export function mountTwin(root, { onLive } = {}) {
+  let disposed = false
   const $ = (id) => root.querySelector(`#${id}`)
   const n = (v) => (v ?? 0).toLocaleString('ko-KR')
   // 이벤트 시각(UTC ISO) → 한국 시각
@@ -202,6 +204,7 @@ export function mountTwin(root) {
   let loadSeq = 0
 
   async function load() {
+    if (disposed) return
     pause()
     const seq = ++loadSeq
     status('불러오는 중…')
@@ -255,7 +258,7 @@ export function mountTwin(root) {
 
   function stepDuration() {
     // 한 건이 컨베이어→트럭까지 가는 시간. 빠를수록 짧게, 아주 빠르면 바로 적재
-    return state.speed >= 20 ? 0 : Math.max(0.6, Math.min(5, 8 / state.speed))
+    return playbackTiming(state.speed).itemDuration
   }
 
   /** 다음 물품을 넣기 전에 트럭을 바꿔야 하는 라인들 */
@@ -280,7 +283,7 @@ export function mountTwin(root) {
       // 꽉 찬 트럭: 그 라인에서 실려 가는 상자가 다 내려앉은 뒤 출발
       if (swaps.some(({ i }) => world.busy(lineOf(i)))) return false
       swapping = true
-      const d = stepDuration() === 0 ? 0.3 : 1.5
+      const d = playbackTiming(state.speed).truckDuration
       swaps.forEach(({ i, ev }) => swap(i, ev, d))
       setTimeout(() => {
         swapping = false
@@ -325,7 +328,7 @@ export function mountTwin(root) {
       if (!state.playing) return
       const batch = Math.max(1, Math.ceil(state.speed / 60))
       for (let i = 0; i < batch && state.playing; i++) if (!pushOne(batch > 1 && i < batch - 1)) break
-      timer = setTimeout(tick, batch > 1 ? 16 : 1000 / state.speed)
+      timer = setTimeout(tick, batch > 1 ? 16 : playbackTiming(state.speed).intervalMs)
     }
     tick()
   }
@@ -688,7 +691,16 @@ export function mountTwin(root) {
 
   // ---------------------------------------------------------------- 이벤트 연결
   $('load').addEventListener('click', load)
-  root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.tab)))
+  root.querySelectorAll('[data-tab]').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (b.dataset.tab === 'live') {
+        pause()
+        onLive?.()
+        return
+      }
+      setMode(b.dataset.tab)
+    }),
+  )
   $('proposal').addEventListener('change', (e) => applyProposal(e.target.value))
   $('play').addEventListener('click', () => (state.playing ? pause() : play()))
   $('step').addEventListener('click', () => {
@@ -731,6 +743,8 @@ export function mountTwin(root) {
   init()
 
   return () => {
+    disposed = true
+    loadSeq++
     pause()
     root.removeEventListener('click', onClick)
     if (mini) mini.dispose()
