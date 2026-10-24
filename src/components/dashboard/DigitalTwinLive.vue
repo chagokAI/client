@@ -7,7 +7,7 @@ import { warehouseApi } from '@/stores/auth.js'
 import { createLiveSubscription, mergeStockBoxes, snapshotResetsScene } from '@/live/stream.js'
 import { createLiveTruckFlow } from '@/live/trucks.js'
 import { TRUCK_MM } from '@/digital-twin/packing.js'
-import { createLiveInputControl } from '@/live/input.js'
+import { bindPageLifecycle, createLiveInputControl } from '@/live/input.js'
 
 const emit = defineEmits(['leave'])
 const stage = ref(null)
@@ -49,6 +49,7 @@ let stream
 let flow
 let frame
 let input
+let unbindPage
 let lastRunRefresh = 0
 const pending = ref(0)
 const unplaced = ref(0)
@@ -122,6 +123,10 @@ onMounted(() => {
   })
   // 구독은 관찰만 한다. 실제 신규 입력은 재생 버튼의 명시적인 PUT에서만 시작한다.
   stream.start()
+  startInput()
+  unbindPage = bindPageLifecycle(window, { hide: leave, restore: startInput })
+})
+function startInput() {
   input = createLiveInputControl(
     async () => (await warehouseApi('/live-input')).data,
     async (running, { ownedOnly, controlId, ...options }) =>
@@ -132,10 +137,9 @@ onMounted(() => {
     },
   )
   input.load()
-  window.addEventListener('pagehide', leave)
-})
+}
 onBeforeUnmount(() => {
-  window.removeEventListener('pagehide', leave)
+  unbindPage?.()
   leave()
   cancelAnimationFrame(frame)
   stream?.stop()

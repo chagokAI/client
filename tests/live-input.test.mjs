@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createLiveInputControl } from '../src/live/input.js'
+import { bindPageLifecycle, createLiveInputControl } from '../src/live/input.js'
 
 const paused = { available: true, running: false, pending: 0 }
 const flush = async () => {
@@ -301,4 +301,16 @@ test('a failed background refresh keeps the last known phase', async () => {
   fail = true
   await run.refresh()
   assert.equal(phases.at(-1), 'paused')
+})
+
+test('a page restored from the back-forward cache gets a working control again', () => {
+  const target = new EventTarget()
+  const calls = []
+  const unbind = bindPageLifecycle(target, { hide: () => calls.push('hide'), restore: () => calls.push('restore') })
+  target.dispatchEvent(new Event('pagehide'))
+  target.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }))
+  target.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
+  unbind()
+  target.dispatchEvent(new Event('pagehide'))
+  assert.deepEqual(calls, ['hide', 'restore'])
 })

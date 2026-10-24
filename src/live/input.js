@@ -91,3 +91,16 @@ export function createLiveInputControl(read, write, changed) {
     },
   }
 }
+
+// pagehide는 화면 소유 실행을 정지시킨다. 뒤로 가기 캐시에서 돌아온 페이지는 같은 컴포넌트를 쓰므로 제어를 다시 만든다.
+export function bindPageLifecycle(target, { hide, restore }) {
+  const onShow = (event) => {
+    if (event.persisted) restore()
+  }
+  target.addEventListener('pagehide', hide)
+  target.addEventListener('pageshow', onShow)
+  return () => {
+    target.removeEventListener('pagehide', hide)
+    target.removeEventListener('pageshow', onShow)
+  }
+}
