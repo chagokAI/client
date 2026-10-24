@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppCard from '@/components/common/AppCard.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AnimatedNumber from '@/components/common/AnimatedNumber.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import LiveTwinPanel from '@/components/dashboard/LiveTwinPanel.vue'
@@ -231,7 +232,7 @@ const costItems = computed(() => {
       <div v-for="kpi in kpis" :key="kpi.id" class="kpi" :class="`kpi--${kpi.tone}`">
         <p class="kpi__label">{{ kpi.label }}</p>
         <p class="kpi__value">
-          {{ kpi.value }}<span class="kpi__unit">{{ kpi.unit }}</span>
+          <AnimatedNumber :value="kpi.value" /><span class="kpi__unit">{{ kpi.unit }}</span>
         </p>
         <p class="kpi__hint">{{ kpi.hint }}</p>
         <p v-if="kpi.id === 'stock'" class="kpi__hint">
@@ -250,11 +251,16 @@ const costItems = computed(() => {
             <div class="compare__head">
               <span class="compare__label">
                 {{ size.label }}
-                <span class="compare__months">{{ size.months == null ? '—' : `${size.monthsText} 여유` }}</span>
+                <span class="compare__months">
+                  <template v-if="size.months != null">
+                    <AnimatedNumber :value="size.months.toFixed(1)" />개월분 여유
+                  </template>
+                  <template v-else>—</template>
+                </span>
               </span>
               <span class="compare__value">
-                <span class="compare__usage">예측 {{ number(size.usage) }}</span>
-                / 현재 {{ number(size.stock) }}개
+                <span class="compare__usage">예측 <AnimatedNumber :value="number(size.usage)" /></span>
+                / 현재 <AnimatedNumber :value="number(size.stock)" />개
               </span>
             </div>
             <div
@@ -262,7 +268,7 @@ const costItems = computed(() => {
               role="img"
               :aria-label="`${size.label} 현재 ${number(size.stock)}개 중 다음 달 예측 ${number(size.usage)}개, 남는 재고 ${number(size.remaining)}개`"
             >
-              <span v-if="size.remainingPct > 0" class="stock-bar__left" :style="{ width: `${size.remainingPct}%` }" />
+              <span class="stock-bar__left" :style="{ width: `${size.remainingPct}%` }" />
             </div>
           </li>
         </ul>
@@ -576,6 +582,25 @@ const costItems = computed(() => {
   height: 100%;
   border-radius: var(--radius-pill);
   background: var(--color-gold);
+  transform-origin: left;
+  animation: stock-bar-reveal 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes stock-bar-reveal {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stock-bar__left {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* 두 식을 세로 구분선으로 나눠 따로 읽히게 합니다. 좁으면 줄을 바꿉니다. */
