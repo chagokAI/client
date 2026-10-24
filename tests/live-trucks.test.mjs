@@ -148,7 +148,8 @@ test('an oversized or invalid box is unplaced without changing packing success o
   assert.equal(flow.accept(oversized), false)
   assert.equal(flow.accept(item(2, [0, 10, 20])), false)
   flow.pump()
-  assert.equal(flow.unplaced, 2)
+  // 적재 불가 건수는 accept()의 반환값으로 화면이 센다. 흐름 객체에는 같은 값을 두 번 두지 않는다.
+  assert.equal('unplaced' in flow, false)
   assert.equal(flow.pending, 0)
   assert.equal(line.trucks.length, 1)
   assert.equal(oversized.box.onHandQty, 299)

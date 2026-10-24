@@ -8,7 +8,6 @@ export function createLiveTruckFlow(world) {
   const line = world.lines[0]
   let truck = new Truck(1, world.truckMm ?? TRUCK_MM)
   const queue = []
-  let unplaced = 0
   let nextStart = -Infinity
   const timing = playbackTiming(6)
 
@@ -16,19 +15,13 @@ export function createLiveTruckFlow(world) {
     accept(item) {
       const dims = [item.box?.innerWidthMm, item.box?.innerDepthMm, item.box?.innerHeightMm]
       const itemDims = [item.itemMm?.widthMm, item.itemMm?.depthMm, item.itemMm?.heightMm]
-      if (!valid(dims) || !valid(itemDims)) {
-        unplaced++
-        return false
-      }
+      if (!valid(dims) || !valid(itemDims)) return false
       let spot = truck.place(dims)
       if (!spot) {
         const next = new Truck(truck.no + 1, truck.size)
         spot = next.place(dims)
         // 빈 트럭에도 못 들어가는 박스로 차량을 늘리지 않는다. 업무상의 포장 성공은 변경하지 않는다.
-        if (!spot) {
-          unplaced++
-          return false
-        }
+        if (!spot) return false
         truck = next
       }
       queue.push({
@@ -64,9 +57,6 @@ export function createLiveTruckFlow(world) {
     },
     get pending() {
       return queue.length
-    },
-    get unplaced() {
-      return unplaced
     },
   }
 }
