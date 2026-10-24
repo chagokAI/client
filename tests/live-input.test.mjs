@@ -270,3 +270,35 @@ test('a new view reads status after the previous views stop has finished', async
   assert.equal(latest.phase, 'paused')
   await current.dispose()
 })
+
+test('an observer picks up a run another operator started, without a loading flash', async () => {
+  const states = [paused, { ...paused, running: true }]
+  const phases = []
+  const run = createLiveInputControl(
+    async () => states.shift() ?? { ...paused, running: true },
+    async () => assert.fail('an observer refresh must never write'),
+    (value) => phases.push(value.phase),
+  )
+  await run.load()
+  assert.equal(phases.at(-1), 'paused')
+  const before = phases.length
+  await run.refresh()
+  assert.deepEqual(phases.slice(before), ['running'])
+})
+
+test('a failed background refresh keeps the last known phase', async () => {
+  let fail = false
+  const phases = []
+  const run = createLiveInputControl(
+    async () => {
+      if (fail) throw new Error('network')
+      return paused
+    },
+    async () => paused,
+    (value) => phases.push(value.phase),
+  )
+  await run.load()
+  fail = true
+  await run.refresh()
+  assert.equal(phases.at(-1), 'paused')
+})

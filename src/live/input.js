@@ -50,6 +50,19 @@ export function createLiveInputControl(read, write, changed) {
         busy = false
       }
     },
+    /** 결과가 들어오는데 정지로 보이면 다른 운영자의 실행일 수 있다. 버튼을 잠그지 않고 상태만 다시 읽는다. */
+    async refresh() {
+      if (busy || disposed || phase === 'error') return
+      busy = true
+      try {
+        state = await read()
+        notify(!state.available ? 'unavailable' : state.running ? 'running' : 'paused')
+      } catch {
+        // 배경 조회 실패는 마지막 상태를 유지한다. 사용자의 명시 조작에서 오류를 보여 준다.
+      } finally {
+        busy = false
+      }
+    },
     async toggle() {
       if (busy || disposed) return
       if (phase === 'error') return this.load()

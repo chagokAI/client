@@ -49,6 +49,7 @@ let stream
 let flow
 let frame
 let input
+let lastRunRefresh = 0
 const pending = ref(0)
 const unplaced = ref(0)
 const dims = (box) => [box.innerWidthMm, box.innerDepthMm, box.innerHeightMm]
@@ -79,6 +80,11 @@ function receive(name, item) {
     if (resets) resetScene()
     else world.setRackStock(Object.fromEntries(boxes.value.map((box) => [box.code, box.onHandQty])))
     return
+  }
+  // 정지로 보이는데 결과가 오면 다른 운영자가 시작한 실행이다. 2초에 한 번만 상태를 다시 읽는다.
+  if (!playing.value && Date.now() - lastRunRefresh >= 2000) {
+    lastRunRefresh = Date.now()
+    input?.refresh()
   }
   counts.value[name]++
   records.value.unshift({ ...item, kind: name })
