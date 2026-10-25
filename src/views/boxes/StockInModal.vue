@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import FormField from '@/components/common/FormField.vue'
@@ -10,15 +10,12 @@ import ApiState from '@/components/common/ApiState.vue'
 import { warehouseApi } from '@/stores/auth'
 import { localDate, quantity } from '@/api/format'
 import { useRemote } from '@/composables/useRemote'
+// 규격은 표에서 입고를 누른 행으로 고정합니다. 다른 규격은 그 행의 입고 버튼으로 엽니다.
 const props = defineProps({
   spec: { type: Object, required: true },
-  specs: { type: Array, default: () => [] },
   busy: Boolean,
 })
 const emit = defineEmits(['close', 'submit'])
-const specOptions = computed(() =>
-  props.specs.map((item) => ({ value: item.id, label: `${item.code} · ${item.sizeName}` })),
-)
 const orders = ref([])
 const form = reactive({ specId: props.spec.id, orderNumber: '', quantity: 0, receivedAt: localDate(), memo: '' })
 const requestId = crypto.randomUUID()
@@ -31,21 +28,13 @@ function refreshOrders() {
     },
   )
 }
-watch(
-  () => form.specId,
-  () => {
-    form.orderNumber = ''
-    refreshOrders()
-  },
-  { immediate: true },
-)
+refreshOrders()
 const openPurchaseOrderOptions = computed(() => [
   { value: '', label: '발주서 연결 안 함' },
   ...orders.value.map((order) => ({ value: order.id, label: order.poNo })),
 ])
-const selectedSpec = computed(() => props.specs.find((item) => item.id === form.specId) ?? props.spec)
-const currentStock = computed(() => selectedSpec.value.onHandQty)
-const safetyStock = computed(() => selectedSpec.value.safetyQty)
+const currentStock = computed(() => props.spec.onHandQty)
+const safetyStock = computed(() => props.spec.safetyQty)
 const nextStock = computed(() => (currentStock.value == null ? null : currentStock.value + Number(form.quantity || 0)))
 const orderedQuantityHint = computed(() => {
   const order = orders.value.find((item) => item.id === form.orderNumber)
@@ -66,8 +55,11 @@ function handleSubmit() {
     <ApiState :loading="loading" :error="error" @retry="refreshOrders" />
     <form class="stock-in" novalidate @submit.prevent="handleSubmit">
       <div class="stock-in__row">
-        <FormField v-slot="{ fieldId }" label="박스 규격" required>
-          <SelectField :id="fieldId" v-model="form.specId" :options="specOptions" width="100%" aria-label="박스 규격" />
+        <FormField label="박스 규격">
+          <p class="stock-in__spec">
+            <strong>{{ spec.code }}</strong>
+            <span class="stock-in__spec-name">{{ spec.sizeName }}</span>
+          </p>
         </FormField>
 
         <FormField v-slot="{ fieldId }" label="연결 발주서">
@@ -138,6 +130,21 @@ function handleSubmit() {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 규격은 고를 수 없으므로 입력칸 대신 글로 보여 줍니다. 높이는 옆 입력칸과 맞춥니다. */
+.stock-in__spec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.stock-in__spec-name {
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 /* 현재 → 입고 후 → 안전 재고를 한 줄로 비교해 보여 줍니다. */

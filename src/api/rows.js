@@ -13,7 +13,10 @@ export function productRow(p) {
     statusLabel: MATCH[p.matchStatus] ?? '미매칭',
   }
 }
-export function specRow(b) {
+// 박스 재고/규격 관리 표의 한 행. 재고는 서버가 규격 한 건에 stock 하나로 묶어 내려줍니다.
+// 재고 정책 수정·입고에 쓰는 id·version 은 규격의 값과 같습니다(같은 행에 저장되어 있습니다).
+export function boxStockRow(b) {
+  const stock = b.stock ?? {}
   return {
     ...b,
     sizeName: b.name,
@@ -23,25 +26,18 @@ export function specRow(b) {
     height: b.innerHeightMm,
     supplierId: b.supplier?.id ?? '',
     supplier: b.supplier?.name ?? '미지정',
+    leadTimeDays: b.supplier?.leadTimeDays ?? null,
     custom: b.isCustom,
     linkedProducts: b.linkedProductCount,
     statusLabel: b.isActive ? '사용 중' : '미사용',
-  }
-}
-export function inventoryRow(b) {
-  return {
-    ...b,
-    id: b.inventoryId,
-    code: b.boxCode,
-    sizeName: b.boxName,
-    dimensions: dimensions(b.innerWidthMm, b.innerDepthMm, b.innerHeightMm),
-    current: quantity(b.onHandQty),
-    safety: quantity(b.safetyQty),
-    level: b.stockLevelPct,
-    daysLeft: b.daysToStockout == null ? '—' : `${b.daysToStockout}일`,
-    statusLabel: STOCK[b.status],
-    supplier: b.supplier?.name ?? '미지정',
-    leadTimeDays: b.supplier?.leadTimeDays ?? null,
+    onHandQty: stock.onHandQty,
+    safetyQty: stock.safetyQty,
+    current: quantity(stock.onHandQty),
+    safety: quantity(stock.safetyQty),
+    level: stock.stockLevelPct,
+    daysLeft: stock.daysToStockout == null ? '—' : `${stock.daysToStockout}일`,
+    stockStatus: stock.status,
+    stockStatusLabel: STOCK[stock.status],
   }
 }
 export function notificationRow(n) {
