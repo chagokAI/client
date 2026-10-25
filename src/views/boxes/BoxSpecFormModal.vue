@@ -3,19 +3,13 @@ import { computed, reactive } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SelectField from '@/components/common/SelectField.vue'
-const materialOptions = ['골판지 B골', '골판지 A골', '골판지 AB골', '이중 골판지'].map((value) => ({
-  value,
-  label: value,
-}))
-const sizeOptions = [
-  { value: 'S', label: '소형 (S)' },
-  { value: 'M', label: '중형 (M)' },
-  { value: 'L', label: '대형 (L)' },
-  { value: 'O', label: '기타' },
-]
+// 크기 분류(S/M/L)는 서버가 내경 부피로 정합니다. 화면에서는 현재 값만 보여 줍니다.
+const SIZE_CLASS = { S: '소형 (S)', M: '중형 (M)', L: '대형 (L)' }
 
 const props = defineProps({
   suppliers: { type: Array, default: () => [] },
+  // 재질 선택지는 서버 코드 목록(/box-materials)입니다. 라벨을 그대로 보내면 400입니다.
+  materials: { type: Array, default: () => [] },
   busy: Boolean,
   // 수정할 규격. null이면 새 규격 등록으로 동작합니다.
   spec: {
@@ -38,13 +32,12 @@ const form = reactive({
   width: props.spec?.width ?? '',
   depth: props.spec?.depth ?? '',
   height: props.spec?.height ?? '',
-  material: props.spec?.material ?? materialOptions[0].value,
+  material: props.spec?.material ?? props.materials[0]?.value ?? '',
   supplier: props.spec?.supplierId ?? '',
-  sizeClass: props.spec?.sizeClass ?? 'S',
   unitPriceKrw: props.spec?.unitPriceKrw ?? 0,
   initialOnHandQty: 0,
-  // 수정할 때는 재고 API가 들고 있는 현재 안전 재고를 그대로 보여 줍니다.
-  safetyQty: props.spec?.stock?.safetyQty ?? 0,
+  // 수정할 때는 목록이 함께 받아 온 현재 안전 재고를 그대로 보여 줍니다.
+  safetyQty: props.spec?.safetyQty ?? 0,
   targetQty: '',
   kind: props.spec?.custom ? 'custom' : 'standard',
   inUse: props.spec ? props.spec.isActive : true,
@@ -108,7 +101,7 @@ function handleSave() {
       <div class="spec-form__row">
         <div class="field">
           <span class="field__label">재질 <span class="field__required">*</span></span>
-          <SelectField v-model="form.material" :options="materialOptions" width="100%" aria-label="재질" />
+          <SelectField v-model="form.material" :options="materials" width="100%" aria-label="재질" />
         </div>
 
         <div class="field">
@@ -156,11 +149,13 @@ function handleSave() {
           />
         </div>
         <div class="field">
-          <span class="field__label">크기 분류</span
-          ><SelectField v-model="form.sizeClass" :options="sizeOptions" width="100%" aria-label="크기 분류" />
+          <span class="field__label">크기 분류</span>
+          <p class="field__readonly">
+            {{ SIZE_CLASS[spec?.sizeClass] ?? '내경 크기로 자동 분류' }}
+          </p>
         </div>
       </div>
-      <div v-if="isEditing && spec.stock" class="spec-form__row">
+      <div v-if="isEditing" class="spec-form__row">
         <div class="field">
           <label class="field__label" for="spec-safety-edit">안전 재고 (개)</label
           ><input
@@ -174,7 +169,7 @@ function handleSave() {
         </div>
         <div class="field">
           <span class="field__label">현재 재고</span>
-          <p class="field__readonly">{{ spec.stock.current }}</p>
+          <p class="field__readonly">{{ spec.current }}</p>
         </div>
       </div>
       <div v-if="!isEditing" class="spec-form__row">

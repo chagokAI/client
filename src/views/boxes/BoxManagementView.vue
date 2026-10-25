@@ -15,9 +15,10 @@ import BoxSpecFormModal from './BoxSpecFormModal.vue'
 import StockInModal from './StockInModal.vue'
 import ApiState from '@/components/common/ApiState.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import { api } from '@/api/client'
 import { auth, warehouseApi } from '@/stores/auth'
 import { quantity, number } from '@/api/format'
-import { specRow, inventoryRow } from '@/api/rows'
+import { boxStockRow } from '@/api/rows'
 import { isNonNegativeInt, isPositiveInt, toDimensions } from '@/api/validate'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSaveAction } from '@/composables/useSaveAction'
@@ -26,8 +27,6 @@ const keyword = ref(''),
 const specs = ref([]),
   counts = ref({}),
   summary = ref(null)
-const inventories = ref([]),
-  inventorySummary = ref(null)
 const formModal = ref(null),
   deletingSpec = ref(null),
   stockInSpec = ref(null)
@@ -45,31 +44,32 @@ const columns = [
   { key: 'description', label: '간단 설명', width: '240px', align: 'left' },
 ]
 const TONE_BY_STOCK = { SUFFICIENT: 'info', CAUTION: 'warning', SHORTAGE: 'danger', UNKNOWN: 'neutral' }
+// 재고 요약은 검색어·탭과 관계없이 센터의 활성 규격 전체 기준입니다(summary.stock).
+const stockSummary = computed(() => summary.value?.stock)
 const inventoryStats = computed(() => [
   {
     id: 'total',
     label: '총 보유 박스',
-    value: quantity(inventorySummary.value?.totalOnHandQty),
-    hint: `${number(inventorySummary.value?.activeSpecCount)}개 규격 운영 중`,
+    value: quantity(stockSummary.value?.totalOnHandQty),
+    hint: `${number(stockSummary.value?.activeSpecCount)}개 규격 운영 중`,
   },
   {
     id: 'shortage',
     label: '재고 부족 규격',
-    value: `${number(inventorySummary.value?.shortageSpecCount)}개`,
+    value: `${number(stockSummary.value?.shortageSpecCount)}개`,
     hint: '안전 재고 미만',
     tone: 'danger',
   },
   {
     id: 'weekly',
     label: '이번 주 참고 수량',
-    value: quantity(inventorySummary.value?.weeklyForecastUsageQty),
+    value: quantity(stockSummary.value?.weeklyForecastUsageQty),
     hint: '저장된 참고 계산 기준',
   },
   {
     id: 'lead',
     label: '평균 재고 소진일',
-    value:
-      inventorySummary.value?.avgDaysToStockout == null ? '—' : `${number(inventorySummary.value.avgDaysToStockout)}일`,
+    value: stockSummary.value?.avgDaysToStockout == null ? '—' : `${number(stockSummary.value.avgDaysToStockout)}일`,
     hint: '등록된 소진일 기준',
   },
 ])
@@ -80,47 +80,43 @@ const statusOptions = computed(() => [
 ])
 const specSummary = computed(() => `총 ${number(summary.value?.totalSpecCount)}개`)
 const supplierOptions = ref([{ value: '', label: '미지정' }])
-// 규격과 재고는 API가 나뉘어 있어 함께 불러온 뒤 규격명(code) 기준으로 한 행에 묶습니다.
-// TODO: /box-specs 응답에 재고(현재·안전·재고 수준)와 요약이 포함되면 호출 하나로 줄입니다.
+const materialOptions = ref([])
+// 규격과 규격별 재고는 /box-stocks 한 번으로 받습니다. 재고는 각 행의 stock 에 들어 있습니다.
 const { loading, error, page, totalPages, refresh } = useListQuery(
   [keyword, statusFilter],
   (signal, page) =>
-    Promise.all([
-      warehouseApi('/box-specs', {
-        signal,
-        query: {
-          keyword: keyword.value,
-          page,
-          size: 100,
-          active: statusFilter.value === 'ACTIVE' ? true : statusFilter.value === 'INACTIVE' ? false : undefined,
-          custom: statusFilter.value === 'CUSTOM' ? true : undefined,
-        },
-      }),
-      warehouseApi('/box-inventories', { signal, query: { size: 100 } }),
-    ]),
-  ([{ data }, { data: stockData }]) => {
-    inventories.value = stockData.items.map(inventoryRow)
-    inventorySummary.value = stockData.summary
-    const stockByCode = new Map(inventories.value.map((item) => [item.code, item]))
-    specs.value = data.items.map(specRow).map((spec) => ({ ...spec, stock: stockByCode.get(spec.code) ?? null }))
+    warehouseApi('/box-stocks', {
+      signal,
+      query: {
+        keyword: keyword.value,
+        page,
+        size: 100,
+        active: statusFilter.value === 'ACTIVE' ? true : statusFilter.value === 'INACTIVE' ? false : undefined,
+        custom: statusFilter.value === 'CUSTOM' ? true : undefined,
+      },
+    }),
+  ({ data }) => {
+    specs.value = data.items.map(boxStockRow)
     counts.value = data.counts
     summary.value = data.summary
     return data.totalPages
   },
 )
-// 공급사 조회 API 연결 전에는 저장된 규격의 공급사만 선택할 수 있다.
-function loadSuppliers() {
+// 규격 모달의 드롭다운 선택지. 재질은 센터와 무관한 고정 목록이라 /box-materials 를 씁니다.
+function loadOptions() {
   return report(async () => {
-    const { data } = await warehouseApi('/box-specs', { query: { size: 100 } })
-    const suppliers = new Map(
-      data.items
-        .filter((b) => b.supplier)
-        .map((b) => [b.supplier.id, { value: b.supplier.id, label: b.supplier.name }]),
-    )
-    supplierOptions.value = [{ value: '', label: '미지정' }, ...suppliers.values()]
+    const [{ data: suppliers }, { data: materials }] = await Promise.all([
+      warehouseApi('/suppliers'),
+      api('/box-materials'),
+    ])
+    supplierOptions.value = [
+      { value: '', label: '미지정' },
+      ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
+    ]
+    materialOptions.value = materials.map((material) => ({ value: material.code, label: material.label }))
   })
 }
-onMounted(loadSuppliers)
+onMounted(loadOptions)
 function openCreate() {
   formModal.value = { spec: null }
 }
@@ -141,7 +137,7 @@ function handleSave(form) {
     const body = {
       code: form.code.trim(),
       name: form.sizeName.trim(),
-      sizeClass: form.sizeClass,
+      // 크기 분류(sizeClass)는 서버가 내경으로 정합니다. 보내면 400입니다.
       innerWidthMm: dims[0],
       innerDepthMm: dims[1],
       innerHeightMm: dims[2],
@@ -158,20 +154,23 @@ function handleSave(form) {
       body.safetyQty = Number(form.safetyQty)
       if (form.targetQty !== '') body.targetQty = Number(form.targetQty)
     }
-    await warehouseApi(target ? `/box-specs/${target.id}` : '/box-specs', { method: target ? 'PATCH' : 'POST', body })
-    // 안전 재고는 재고 API가 따로 들고 있어 바뀐 경우에만 이어서 저장합니다.
-    if (target?.stock && Number(form.safetyQty) !== target.stock.safetyQty)
-      await warehouseApi(`/box-inventories/${target.stock.id}/policy`, {
+    const { data: saved } = await warehouseApi(target ? `/box-specs/${target.id}` : '/box-specs', {
+      method: target ? 'PATCH' : 'POST',
+      body,
+    })
+    // 안전 재고는 정책 API가 따로 들고 있어 바뀐 경우에만 이어서 저장합니다.
+    // 규격과 같은 행이라 방금 저장한 응답의 version 을 그대로 expectedVersion 으로 보냅니다.
+    if (target && Number(form.safetyQty) !== target.safetyQty)
+      await warehouseApi(`/box-inventories/${target.id}/policy`, {
         method: 'PATCH',
         body: {
-          expectedVersion: target.stock.version,
+          expectedVersion: saved.version,
           safetyQty: Number(form.safetyQty),
-          alertEnabled: target.stock.alertEnabled ?? true,
+          alertEnabled: target.stock?.alertEnabled ?? true,
         },
       })
     formModal.value = null
     await refresh()
-    loadSuppliers()
   }, '박스 규격이 저장되었습니다.')
 }
 function requestDelete() {
@@ -188,7 +187,7 @@ function handleStockInSubmit(form) {
   return run(async () => {
     if (!isPositiveInt(form.quantity)) throw new Error('입고 수량은 양수 정수로 입력해 주세요.')
     const qty = Number(form.quantity)
-    const target = inventories.value.find((item) => item.id === form.specId)
+    const target = specs.value.find((item) => item.id === form.specId)
     await warehouseApi('/inventory-receipts', {
       method: 'POST',
       body: {
@@ -245,22 +244,18 @@ function handleStockInSubmit(form) {
       </template>
 
       <template #cell-current="{ row }">
-        <strong v-if="row.stock">{{ row.stock.current }}</strong>
+        <strong v-if="row.onHandQty != null">{{ row.current }}</strong>
         <span v-else class="cell--empty">—</span>
       </template>
 
       <template #cell-safety="{ row }">
-        <span :class="{ 'cell--empty': !row.stock }">{{ row.stock ? row.stock.safety : '—' }}</span>
+        <span :class="{ 'cell--empty': row.safetyQty == null }">{{ row.safety }}</span>
       </template>
 
       <template #cell-level="{ row }">
-        <div v-if="row.stock?.level != null" class="level">
-          <ProgressBar
-            :value="row.stock.level"
-            :tone="TONE_BY_STOCK[row.stock.status]"
-            :label="`${row.code} 재고 수준`"
-          />
-          <span class="level__value">{{ row.stock.level }}%</span>
+        <div v-if="row.level != null" class="level">
+          <ProgressBar :value="row.level" :tone="TONE_BY_STOCK[row.stockStatus]" :label="`${row.code} 재고 수준`" />
+          <span class="level__value">{{ row.level }}%</span>
         </div>
         <span v-else class="cell--empty">—</span>
       </template>
@@ -291,11 +286,7 @@ function handleStockInSubmit(form) {
           >
             삭제
           </AppButton>
-          <AppButton
-            size="sm"
-            :disabled="!auth.canEdit.value || row.stock?.onHandQty == null"
-            @click="stockInSpec = row.stock"
-          >
+          <AppButton size="sm" :disabled="!auth.canEdit.value || row.onHandQty == null" @click="stockInSpec = row">
             입고
           </AppButton>
         </div>
@@ -317,6 +308,7 @@ function handleStockInSubmit(form) {
       v-if="formModal"
       :spec="formModal.spec"
       :suppliers="supplierOptions"
+      :materials="materialOptions"
       :busy="saving"
       @close="formModal = null"
       @save="handleSave"
@@ -332,7 +324,6 @@ function handleStockInSubmit(form) {
     <StockInModal
       v-if="stockInSpec"
       :spec="stockInSpec"
-      :specs="inventories"
       :busy="saving"
       @close="stockInSpec = null"
       @submit="handleStockInSubmit"

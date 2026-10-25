@@ -5,7 +5,7 @@ import DigitalTwinLive from './DigitalTwinLive.vue'
 import '@/digital-twin/twin.css'
 
 // 물류공간 디지털트윈(초기 시연): 출고 이벤트를 흘려 박스를 고르고 트럭에 싣는 흐름을 3D 로 보여 준다.
-// 3D·재생 로직은 src/digital-twin, 데이터는 기존 Spring API(simulation-state·box-inventories·box-specs·products)로 받는다.
+// 3D·재생 로직은 src/digital-twin, 데이터는 기존 Spring API(simulation-state·box-stocks·products)로 받는다.
 const root = ref(null)
 const props = defineProps({ initialMode: { type: String, default: 'base' } })
 const shell = ref(null)

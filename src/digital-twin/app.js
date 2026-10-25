@@ -6,7 +6,7 @@ import { playbackTiming } from './playback.js'
 /**
  * 물류공간 디지털트윈 화면을 root 안에 붙인다. 반환값을 부르면 타이머·3D 자원·이벤트를 정리한다.
  * 데이터는 기존 Spring API(로그인 세션)로 받는다: 출고 이벤트·DL 측정 치수 /simulation-state(from·to),
- * 재고 /box-inventories, 단가 /box-specs, 물품 원본 /products/{id},
+ * 박스 치수·재고·단가 /box-stocks, 물품 원본 /products/{id},
  * 에이전트 제안서 /ai-tasks → /procurement-proposals/{id}. 박스 선택·트럭 적재는 packing.js 에서 계산한다.
  *
  * 라인 두 줄에 같은 물품을 같은 순서로 흘린다.
@@ -61,22 +61,16 @@ export function mountTwin(root, { onLive } = {}) {
   }
 
   async function loadBoxes() {
-    // 재고(보유 박스·치수)는 /box-inventories, 단가는 /box-specs 에서 가져와 코드로 합친다
-    const [inv, specs] = await Promise.all([
-      warehouseApi('/box-inventories', { query: { size: 100 } }),
-      warehouseApi('/box-specs', { query: { active: true, size: 100 } }),
-    ])
-    const price = Object.fromEntries(
-      (specs.data.items ?? specs.data.content ?? []).map((b) => [b.code, b.unitPriceKrw]),
-    )
-    return (inv.data.items ?? [])
+    // 치수·단가·재고를 한 번에 주는 /box-stocks 에서 사용 중인 규격만 가져온다
+    const { data } = await warehouseApi('/box-stocks', { query: { active: true, size: 100 } })
+    return (data.items ?? [])
       .filter((b) => b.innerWidthMm)
       .map((b) => ({
-        code: b.boxCode,
-        name: b.boxName,
+        code: b.code,
+        name: b.name,
         dims: [b.innerWidthMm, b.innerDepthMm, b.innerHeightMm],
-        price: price[b.boxCode] ?? null,
-        stock: b.onHandQty ?? 0,
+        price: b.unitPriceKrw ?? null,
+        stock: b.stock?.onHandQty ?? 0,
       }))
       .sort((a, b) => a.code.localeCompare(b.code, 'ko'))
   }
