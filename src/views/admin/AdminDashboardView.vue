@@ -1,12 +1,14 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api/client'
 import ApiState from '@/components/common/ApiState.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import CenterMap from '@/components/admin/CenterMap.vue'
+import FillRateChart from '@/components/admin/FillRateChart.vue'
 import { useRemote } from '@/composables/useRemote'
+import { centerReports, FILL_TARGET, REPORT_MONTHS, reportSummary, reruns, STATUS } from './hqReportSample'
 
 // 센터 위치: 좌표가 등록된 센터만 지도에 핀으로 찍습니다.
 const { loading, error, load } = useRemote()
@@ -22,27 +24,29 @@ function refresh() {
 }
 onMounted(refresh)
 
-// TODO: 아래 두 목록은 레이아웃 확인용 예시입니다. 센터 통합 지표 API가 준비되면 교체합니다.
-// 매출: 센터별로 '무엇이 얼마나 좋아졌는지'를 한 줄씩 보여 줍니다.
-const performances = [
-  { id: 'cost', center: '동탄 센터', metric: '박스 비용', change: '−12.4%', note: '전월 대비 · 규격 교체 반영' },
-  { id: 'throughput', center: '동탄 센터', metric: '시간당 처리량', change: '+8.2%', note: '최근 4주 평균' },
-  { id: 'fill', center: '김포 센터', metric: '평균 포장공간비율', change: '+5.1%p', note: '매칭 규격 조정 후' },
-  { id: 'waste', center: '양산 센터', metric: '완충재 사용량', change: '−18.0%', note: '전월 대비' },
-]
+// 지도에서 핀을 누르면 오른쪽 패널을 그 센터 리포트로 바꿉니다. 기본(null)은 본부 전체 요약입니다.
+const selectedId = ref(null)
+const selectedCenter = computed(() => centers.value.find((c) => c.warehouseId === selectedId.value) ?? null)
 
-// 문제 현황: 센터장이 바로 조치해야 하는 항목만 모읍니다.
-const issues = [
-  { id: 'shortage', center: '김포 센터', title: '3호 규격 재고 부족', detail: '안전 재고 165개 미만', label: '부족' },
-  { id: 'unmatched', center: '양산 센터', title: '미매칭 상품 12건', detail: '치수 미등록 8건 포함', label: '미매칭' },
-  {
-    id: 'review',
-    center: '동탄 센터',
-    title: '포장공간비율 30% 미만 5건',
-    detail: '규격 재검토 필요',
-    label: '검토 필요',
-  },
-]
+// TODO: 예시 리포트는 센터 이름으로만 묶여 있어 이름으로 찾습니다. API로 바꾸면 warehouseId 로 찾습니다.
+const selectedReport = computed(() => centerReports.find((r) => r.name === selectedCenter.value?.name) ?? null)
+const selectedReruns = computed(() => reruns.filter((r) => r.center === selectedCenter.value?.name))
+
+function selectByName(name) {
+  const center = centers.value.find((c) => c.name === name)
+  if (center) selectedId.value = center.warehouseId
+}
+
+const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`
+const signedWon = (n) => `${n >= 0 ? '+' : '−'}${won(Math.abs(n))}`
+const kg = (n) => `${Math.round(n).toLocaleString('ko-KR')} kg`
+const pointDelta = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}%p`
+
+// 선택한 센터의 이번 달 충진율과 전월 대비 변화
+const centerFill = computed(() => {
+  const fills = selectedReport.value?.fills ?? []
+  return { now: fills.at(-1), delta: fills.at(-1) - fills.at(-2) }
+})
 </script>
 
 <template>
@@ -56,35 +60,144 @@ const issues = [
 
     <div class="admin-dashboard__columns">
       <!-- 지도는 카드 장식 없이 영역을 꽉 채웁니다. -->
-      <CenterMap class="admin-dashboard__map" :centers="centers" />
+      <CenterMap
+        class="admin-dashboard__map"
+        :centers="centers"
+        :selected-id="selectedId"
+        @select="selectedId = $event"
+      />
 
       <div class="admin-dashboard__side">
-        <AppCard title="매출">
-          <ul class="performance">
-            <li v-for="item in performances" :key="item.id" class="performance__item">
-              <div class="performance__text">
-                <p class="performance__metric">
-                  <span class="performance__center">{{ item.center }}</span>
-                  {{ item.metric }}
-                </p>
-                <p class="performance__note">{{ item.note }}</p>
-              </div>
-              <strong class="performance__change">{{ item.change }}</strong>
-            </li>
-          </ul>
-        </AppCard>
+        <div class="scope">
+          <div class="scope__text">
+            <p class="scope__eyebrow">
+              {{ selectedCenter ? '선택한 센터' : '본부 전체 요약' }} · {{ reportSummary.month }} 리포트
+            </p>
+            <p class="scope__name">{{ selectedCenter?.name ?? '전체 센터' }}</p>
+          </div>
+          <button v-if="selectedCenter" type="button" class="scope__reset" @click="selectedId = null">전체 보기</button>
+        </div>
 
-        <AppCard title="문제 현황">
-          <ul class="issue">
-            <li v-for="item in issues" :key="item.id" class="issue__item">
-              <div class="issue__text">
-                <p class="issue__title">{{ item.title }}</p>
-                <p class="issue__detail">{{ item.center }} · {{ item.detail }}</p>
+        <!-- 본부 전체 요약 -->
+        <template v-if="!selectedCenter">
+          <AppCard title="절감 효과" meta="박스비 + 운임">
+            <div class="figure">
+              <p class="figure__label">이번 달 · 전월 대비</p>
+              <p class="figure__value">{{ signedWon(reportSummary.monthSaving) }}</p>
+              <p class="figure__sub">연 {{ reportSummary.annualSavingLabel }} 추정</p>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>누적 절감 <small>11~1월</small></dt>
+                <dd>{{ won(reportSummary.cumulativeSaving) }}</dd>
               </div>
-              <StatusBadge :label="item.label" />
-            </li>
-          </ul>
-        </AppCard>
+              <div>
+                <dt>1년 예상</dt>
+                <dd>{{ reportSummary.yearSavingLabel }}</dd>
+              </div>
+              <div>
+                <dt>누적 탄소 감축</dt>
+                <dd>{{ kg(reportSummary.cumulativeCarbonKg) }}</dd>
+              </div>
+              <div>
+                <dt>평균 충진율</dt>
+                <dd>{{ reportSummary.fillRate.from }} → {{ reportSummary.fillRate.to }}%</dd>
+              </div>
+            </dl>
+          </AppCard>
+
+          <AppCard title="센터 판정" :meta="`목표 충진율 ${FILL_TARGET}%`">
+            <ul class="counts">
+              <li v-for="(meta, key) in STATUS" :key="key" class="counts__item" :class="`counts__item--${key}`">
+                <span>{{ meta.label }}</span>
+                <strong>{{ reportSummary.counts[key] }}<small>곳</small></strong>
+              </li>
+            </ul>
+
+            <h3 class="subhead">이번 달 재실행</h3>
+            <ul v-if="reruns.length" class="rerun">
+              <li v-for="item in reruns" :key="item.center">
+                <button type="button" class="rerun__item" @click="selectByName(item.center)">
+                  <span class="rerun__text">
+                    <span class="rerun__title">{{ item.center }}</span>
+                    <span class="rerun__detail">
+                      충진율 {{ item.before.toFixed(1) }} → {{ item.after.toFixed(1) }}% · 신규 규격 {{ item.added }}종
+                    </span>
+                  </span>
+                  <StatusBadge :label="STATUS[item.status].label" :tone="STATUS[item.status].tone" />
+                </button>
+              </li>
+            </ul>
+            <p v-else class="empty">이번 달 재실행한 센터가 없습니다.</p>
+          </AppCard>
+        </template>
+
+        <!-- 선택한 센터 -->
+        <template v-else-if="selectedReport">
+          <AppCard title="충진율">
+            <template #actions>
+              <StatusBadge :label="STATUS[selectedReport.status].label" :tone="STATUS[selectedReport.status].tone" />
+            </template>
+            <div class="figure">
+              <p class="figure__label">{{ STATUS[selectedReport.status].reason }}</p>
+              <p class="figure__value">
+                {{ centerFill.now.toFixed(1) }}%
+                <span class="delta" :class="{ 'delta--flat': centerFill.delta === 0 }">
+                  {{ pointDelta(centerFill.delta) }}
+                </span>
+              </p>
+              <p class="figure__sub">전월 대비 · 목표 {{ FILL_TARGET }}%</p>
+            </div>
+            <FillRateChart
+              :base="selectedReport.base"
+              :fills="selectedReport.fills"
+              :months="REPORT_MONTHS"
+              :target="FILL_TARGET"
+            />
+          </AppCard>
+
+          <AppCard title="절감 효과" meta="박스비 + 운임">
+            <div class="figure">
+              <p class="figure__label">이번 달 · 전월 대비</p>
+              <p class="figure__value">{{ signedWon(selectedReport.monthSaving) }}</p>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>누적 절감 <small>11~1월</small></dt>
+                <dd>{{ won(selectedReport.cumulativeSaving) }}</dd>
+              </div>
+              <div>
+                <dt>누적 탄소 감축</dt>
+                <dd>{{ kg(selectedReport.cumulativeCarbonKg) }}</dd>
+              </div>
+              <div>
+                <dt>출고</dt>
+                <dd>{{ selectedReport.shipments.toLocaleString('ko-KR') }}건</dd>
+              </div>
+              <div>
+                <dt>개선 반영</dt>
+                <dd>
+                  {{ selectedReport.improvements.month }}건
+                  <small>/ 누적 {{ selectedReport.improvements.total }}건</small>
+                </dd>
+              </div>
+            </dl>
+          </AppCard>
+
+          <AppCard v-if="selectedReruns.length" title="이번 달 재실행">
+            <p v-for="item in selectedReruns" :key="item.center" class="rerun__note">
+              1차 제안 후 충진율이 {{ item.before.toFixed(1) }}%에 머물러 충진율 목표 모드로 다시 제안했습니다. 신규
+              규격 {{ item.added }}종을 반영해 <b>{{ item.after.toFixed(1) }}%</b>가 되었고, 월 비용은
+              {{ won(item.saving) }} 줄었습니다.
+            </p>
+          </AppCard>
+        </template>
+
+        <div v-else class="side-empty">
+          <p class="empty">{{ reportSummary.month }} 리포트에 이 센터 데이터가 없습니다.</p>
+        </div>
+
+        <p class="sample-note">예시 데이터 · 본부 효율화 리포트 {{ reportSummary.month }} 기준</p>
       </div>
     </div>
   </div>
@@ -103,6 +216,7 @@ const issues = [
 
 .admin-dashboard__side {
   display: grid;
+  align-content: start;
   gap: 20px;
 }
 
@@ -147,59 +261,249 @@ const issues = [
   }
 }
 
-.performance,
-.issue {
+/* 패널 맨 위: 지금 보고 있는 범위(전체 또는 선택한 센터) */
+.scope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-cream);
+}
+
+.scope__text {
+  min-width: 0;
+}
+
+.scope__eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.scope__name {
+  margin: 2px 0 0;
+  color: var(--color-brown);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.scope__reset {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-white);
+  color: var(--color-brown);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scope__reset:hover {
+  background: var(--color-cream-strong);
+}
+
+/* 카드 맨 위의 대표 숫자 */
+.figure {
+  margin-bottom: 16px;
+}
+
+.figure__label {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.figure__value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 0;
+  color: var(--color-text);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.figure__sub {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.delta {
+  color: var(--color-success-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.delta--flat {
+  color: var(--color-text-muted);
+}
+
+/* 2열 보조 지표 */
+.stats {
   display: grid;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.stats div {
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-cream-soft);
+}
+
+.stats dt {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.stats dd {
+  margin: 3px 0 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  word-break: keep-all;
+}
+
+.stats small {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* 판정별 센터 수 */
+.counts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.performance__item,
-.issue__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 16px;
+.counts__item {
+  padding: 10px 12px;
+  border-top: 3px solid var(--color-success);
   border-radius: var(--radius-md);
   background: var(--color-cream-soft);
 }
 
-.performance__text,
-.issue__text {
-  min-width: 0;
+.counts__item--warn {
+  border-top-color: var(--color-warning);
 }
 
-.performance__metric,
-.issue__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
+.counts__item--bad {
+  border-top-color: var(--color-danger);
 }
 
-.performance__center {
-  margin-right: 6px;
+.counts__item span {
+  display: block;
   color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.counts__item strong {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.counts__item small {
+  margin-left: 2px;
+  color: var(--color-text-muted);
+  font-size: 11px;
   font-weight: 500;
 }
 
-.performance__note,
-.issue__detail {
-  margin: 4px 0 0;
+.subhead {
+  margin: 18px 0 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 재실행 목록: 누르면 그 센터를 선택합니다. */
+.rerun {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rerun__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-cream-soft);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rerun__item:hover {
+  background: var(--color-cream);
+}
+
+.rerun__text {
+  display: grid;
+  min-width: 0;
+}
+
+.rerun__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rerun__detail {
+  margin-top: 2px;
   color: var(--color-text-muted);
   font-size: 11px;
-  line-height: 1.5;
+}
+
+.rerun__note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
   word-break: keep-all;
 }
 
-.performance__change {
-  flex: none;
-  color: var(--color-success-text);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
+.side-empty {
+  padding: 20px 24px;
+}
+
+.empty {
+  margin: 0;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-cream-soft);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.sample-note {
+  margin: 0;
+  padding: 12px 24px 20px;
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 </style>
