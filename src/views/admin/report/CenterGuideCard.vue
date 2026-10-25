@@ -24,6 +24,23 @@ const message = ref('')
 const messageError = ref(false)
 const docId = ref('')
 const showAll = ref(false)
+const showHistory = ref(false)
+// 변경 이력 한 줄: '6월 30일 14:05 · 본부장(demo-hq) · 규격 상한 15 → 20종 · 지침서 화면에서 조정'
+const ruleLabel = (key) => rules.value.find((r) => r.key === key)
+const historyRows = computed(() =>
+  (guide.value?.history ?? []).map((h, i) => {
+    const rule = ruleLabel(h.key) ?? { label: h.key, unit: '', type: 'int' }
+    const value = (v) => (v === null || v === undefined ? `기본값(${fmt(rule, rule.default ?? '')})` : fmt(rule, v))
+    const at = new Date(h.changedAt)
+    return {
+      id: `${h.changedAt}-${i}`,
+      when: `${at.getMonth() + 1}월 ${at.getDate()}일 ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`,
+      who: h.changedBy ?? '알 수 없음',
+      what: `${rule.label} ${value(h.before)} → ${value(h.after)}`,
+      why: h.reason ?? '',
+    }
+  }),
+)
 // 규정 문서 고치기(전 센터 공통). editing = { docId, markdown } 원문 틀({규칙 키} 자리 포함)
 const editing = ref(null)
 const docSaving = ref(false)
@@ -317,6 +334,19 @@ onMounted(refresh)
             </AppButton>
           </div>
         </div>
+
+        <section v-if="historyRows.length" class="history">
+          <button type="button" class="guide__more" :aria-expanded="showHistory" @click="showHistory = !showHistory">
+            {{ showHistory ? '변경 이력 접기' : `변경 이력 ${historyRows.length}건 보기` }}
+          </button>
+          <ol v-if="showHistory" class="history__list">
+            <li v-for="row in historyRows" :key="row.id">
+              <span class="history__meta">{{ row.when }} · {{ row.who }}</span>
+              <span>{{ row.what }}</span>
+              <span v-if="row.why" class="history__why">{{ row.why }}</span>
+            </li>
+          </ol>
+        </section>
       </section>
 
       <section class="guide__doc" aria-label="센터 지침서 미리보기">
@@ -489,6 +519,29 @@ onMounted(refresh)
 .guide__more {
   margin-top: 14px;
   font-size: 12px;
+}
+
+.history__list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.history__list li {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-divider);
+  word-break: keep-all;
+}
+
+.history__meta,
+.history__why {
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .guide__save {
