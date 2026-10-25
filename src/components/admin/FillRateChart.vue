@@ -1,15 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 
-// 월별 충진율 막대. 한 막대를 기본 7종 충진율 · 지난달까지 오른 몫 · 이번 달 오른 몫으로 쌓고,
+// 월별 충진율 막대. 한 막대를 도입 전 충진율 · 지난달까지 오른 몫 · 이번 달 오른 몫으로 쌓고,
 // 목표선(점선)을 함께 그어 목표까지 얼마나 남았는지 보여 줍니다.
 const props = defineProps({
-  // 기본 7종만 쓸 때 충진율(%)
-  base: { type: Number, required: true },
+  // 도입 전 충진율(%)
+  base: { type: Number, default: null },
   // 월별 충진율(%). months 와 같은 순서
   fills: { type: Array, required: true },
   months: { type: Array, required: true },
-  target: { type: Number, default: 50 },
+  target: { type: Number, default: null },
 })
 
 const W = 300
@@ -17,19 +17,22 @@ const TOP = 16
 const BOTTOM = 100
 const BAR = 44
 
-const max = computed(() => Math.max(70, Math.ceil((Math.max(...props.fills, props.target) + 10) / 10) * 10))
+const max = computed(() =>
+  Math.max(70, Math.ceil((Math.max(...props.fills.filter(Number.isFinite), props.target ?? 0) + 10) / 10) * 10),
+)
 const y = (v) => BOTTOM - (v / max.value) * (BOTTOM - TOP)
 
 const bars = computed(() =>
   props.fills.map((fill, i) => {
-    const prev = i ? Math.max(props.fills[i - 1], props.base) : props.base
+    const base = Math.min(fill ?? 0, props.base ?? 0)
+    const prev = Math.min(fill ?? 0, Math.max(props.fills[i - 1] ?? base, base))
     const x = ((i + 0.5) * W) / props.fills.length - BAR / 2
     const seg = (from, to, kind) => ({ kind, y: y(to), height: Math.max(0, y(from) - y(to)) })
     return {
       x,
       fill,
       month: props.months[i],
-      segments: [seg(0, props.base, 'base'), seg(props.base, prev, 'prior'), seg(prev, fill, 'now')],
+      segments: fill == null ? [] : [seg(0, base, 'base'), seg(base, prev, 'prior'), seg(prev, fill, 'now')],
     }
   }),
 )
@@ -37,7 +40,11 @@ const bars = computed(() =>
 
 <template>
   <figure class="fill-chart">
-    <svg :viewBox="`0 0 ${W} 120`" role="img" :aria-label="`월별 충진율: ${fills.join('%, ')}%`">
+    <svg
+      :viewBox="`0 0 ${W} 120`"
+      role="img"
+      :aria-label="`월별 충진율: ${fills.map((fill) => (fill == null ? '자료 없음' : fill + '%')).join(', ')}`"
+    >
       <g v-for="bar in bars" :key="bar.month">
         <rect
           v-for="s in bar.segments"
@@ -48,16 +55,18 @@ const bars = computed(() =>
           :width="BAR"
           :height="s.height"
         />
-        <text class="fill-chart__value" :x="bar.x + BAR / 2" :y="y(bar.fill) - 4">{{ bar.fill.toFixed(1) }}%</text>
+        <text class="fill-chart__value" :x="bar.x + BAR / 2" :y="bar.fill == null ? BOTTOM - 4 : y(bar.fill) - 4">
+          {{ bar.fill == null ? '—' : bar.fill.toFixed(1) + '%' }}
+        </text>
         <text class="fill-chart__month" :x="bar.x + BAR / 2" y="114">{{ bar.month }}</text>
       </g>
-      <line class="fill-chart__target" x1="0" :x2="W" :y1="y(target)" :y2="y(target)" />
+      <line v-if="target != null" class="fill-chart__target" x1="0" :x2="W" :y1="y(target)" :y2="y(target)" />
     </svg>
     <figcaption class="fill-chart__legend">
-      <span><i class="fill-chart__base" />기본 7종</span>
+      <span><i class="fill-chart__base" />도입 전</span>
       <span><i class="fill-chart__prior" />지난달까지 상승</span>
       <span><i class="fill-chart__now" />이번 달 상승</span>
-      <span><i class="fill-chart__target-key" />목표 {{ target }}%</span>
+      <span v-if="target != null"><i class="fill-chart__target-key" />목표 {{ target }}%</span>
     </figcaption>
   </figure>
 </template>
