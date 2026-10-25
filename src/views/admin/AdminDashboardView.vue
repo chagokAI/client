@@ -55,9 +55,8 @@ const issues = [
     <ApiState :loading="loading" :error="error" @retry="refresh" />
 
     <div class="admin-dashboard__columns">
-      <AppCard class="admin-dashboard__map" title="센터 위치" :padded="false">
-        <CenterMap :centers="centers" />
-      </AppCard>
+      <!-- 지도는 카드 장식 없이 영역을 꽉 채웁니다. -->
+      <CenterMap class="admin-dashboard__map" :centers="centers" />
 
       <div class="admin-dashboard__side">
         <AppCard title="매출">
@@ -92,18 +91,14 @@ const issues = [
 </template>
 
 <style scoped>
-/* 왼쪽 지도, 오른쪽 매출·문제 현황을 6:4로 나눕니다. */
+/* 좁은 화면: 지도 아래에 패널이 쌓입니다. */
 .admin-dashboard__columns {
   display: grid;
   gap: 20px;
-  grid-template-columns: 6fr 4fr;
-  align-items: start;
 }
 
-/* 지도 카드는 오른쪽 두 카드를 합친 높이만큼 늘어납니다. */
 .admin-dashboard__map {
-  align-self: stretch;
-  overflow: hidden;
+  border-radius: 0;
 }
 
 .admin-dashboard__side {
@@ -111,8 +106,8 @@ const issues = [
   gap: 20px;
 }
 
-/* 넓은 화면에서는 본문 여백(위 40 + 아래 72)을 뺀 높이에 맞춰 한 화면에 담습니다.
-   좁은 화면은 1열로 쌓이므로 높이를 고정하지 않습니다. */
+/* 넓은 화면: 지도와 패널을 나란히 둡니다. 지도를 덮으면 저작권 표기가 가려지므로
+   겹치지 않게 칸을 나눕니다. 본문 여백(위 40 + 아래 72)을 뺀 높이에 맞춰 한 화면에 담습니다. */
 @media (min-width: 1181px) {
   .admin-dashboard {
     display: flex;
@@ -123,34 +118,33 @@ const issues = [
   .admin-dashboard__columns {
     flex: 1;
     min-height: 0;
-    align-items: stretch;
+    gap: 0;
+    grid-template-columns: minmax(0, 1fr) 380px;
   }
 
-  /* 오른쪽 두 카드가 남은 높이를 나눠 갖고, 내용이 넘치면 카드 안에서만 스크롤됩니다. */
+  /* 지도는 왼쪽 칸을 꽉 채웁니다. */
+  .admin-dashboard__map {
+    min-width: 0;
+  }
+
+  /* 오른쪽 패널. 세로로 길어지면 패널 안에서만 스크롤됩니다. */
   .admin-dashboard__side {
-    grid-template-rows: repeat(2, minmax(0, 1fr));
     min-height: 0;
-  }
-
-  .admin-dashboard__side > * {
-    min-height: 0;
-  }
-
-  .admin-dashboard__side :deep(.app-card__body) {
-    min-height: 0;
+    gap: 0;
     overflow-y: auto;
+    background: var(--color-white);
   }
-}
 
-/* 지도가 카드 본문 높이를 모두 채우도록 본문을 세로 flex로 둡니다. */
-.admin-dashboard__map :deep(.app-card__body) {
-  display: flex;
-  flex-direction: column;
-}
+  /* 패널 안에서는 카드 테두리를 걷고 구분선으로만 나눕니다. */
+  .admin-dashboard__side :deep(.app-card) {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
-.admin-dashboard__map :deep(.center-map) {
-  flex: 1;
-  height: auto;
+  .admin-dashboard__side :deep(.app-card + .app-card) {
+    border-top: 1px solid var(--color-divider);
+  }
 }
 
 .performance,
@@ -207,11 +201,5 @@ const issues = [
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.3px;
-}
-
-@media (max-width: 1180px) {
-  .admin-dashboard__columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 </style>
