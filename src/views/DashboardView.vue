@@ -74,34 +74,40 @@ onBeforeUnmount(() => {
   stockStream?.stop()
 })
 
-// 재고 여유(몇 개월분) = 현재 재고 ÷ 다음 달 예측 사용량. 1.5개월 미만은 부족 주의, 12개월 이상은 과잉으로 봅니다.
-const LOW_MONTHS = 1.5
-const HIGH_MONTHS = 12
+// 크기 상태: 월말 재고가 그 크기 안전 재고보다 적으면 부족(warn), 한 달 소모 이상 남으면 과잉(info)
 const SIZE_LABEL = { S: 'S (소형)', M: 'M (중형)', L: 'L (대형)' }
 
-const months = (stock, usage) => (usage > 0 && stock != null ? stock / usage : null)
-const monthsText = (value) => (value == null ? '—' : `${value.toFixed(1)}개월분`)
-const monthsTone = (value) =>
-  value == null ? 'muted' : value < LOW_MONTHS ? 'warn' : value >= HIGH_MONTHS ? 'info' : 'ok'
+// 다음 달 말 예상 재고(서버 projectedStock): 월초 재고 = 현재 − 이달 남은 소모 + 입고 예정, 월말 = 월초 + 남은 주문 − 다음 달 소모.
+// 지금 재고에서 다음 달 소모만 빼면 이달 남은 소모와 이미 잡힌 주문이 빠져 실제와 어긋난다.
+const projection = computed(() => data.value?.projectedStock ?? null)
+const targetMonthLabel = computed(() => {
+  const month = data.value?.targetMonth
+  return month ? `${Number(month.slice(5))}월` : '다음 달'
+})
 
 const sizes = computed(() => {
-  const stock = Object.fromEntries((data.value?.stockBySize ?? []).map((s) => [s.sizeClass, s.onHandQty ?? 0]))
+  const stock = Object.fromEntries((data.value?.stockBySize ?? []).map((s) => [s.sizeClass, s]))
   const usage = Object.fromEntries(
     (data.value?.demandForecast?.bySize ?? []).map((s) => [s.sizeClass, s.forecastUsageQty ?? 0]),
   )
+  const projected = Object.fromEntries((projection.value?.bySize ?? []).map((s) => [s.sizeClass, s]))
   const rows = ['S', 'M', 'L']
-    .filter((size) => size in stock || size in usage)
+    .filter((size) => size in stock || size in usage || size in projected)
     .map((size) => {
-      const value = months(stock[size] ?? 0, usage[size] ?? 0)
-      return { id: size, label: SIZE_LABEL[size], stock: stock[size] ?? 0, usage: usage[size] ?? 0, months: value }
+      const current = stock[size]?.onHandQty ?? 0
+      const p = projected[size]
+      const use = p?.demandQty ?? usage[size] ?? 0
+      // 다음 달 쓸 수 있는 양 = 월초 재고 + 남은 주문 (서버 계산이 없으면 지금 재고)
+      const supply = p ? p.startQty - p.consumeBeforeQty + p.inboundQty + p.orderQty : current
+      const end = p ? p.endQty : current - use
+      const safety = stock[size]?.safetyQty ?? null
+      return { id: size, label: SIZE_LABEL[size], stock: current, usage: use, supply, end, safety }
     })
   return rows.map((row) => ({
     ...row,
-    monthsText: monthsText(row.months),
-    tone: monthsTone(row.months),
-    // 막대 전체 = 현재 재고, 채워진 부분 = 다음 달 예측량을 쓰고 남는 재고(왼쪽), 나머지 빈칸 = 예측량
-    remaining: Math.max(0, row.stock - row.usage),
-    remainingPct: row.stock > 0 ? (Math.max(0, row.stock - row.usage) / row.stock) * 100 : 0,
+    tone: row.safety != null && row.end < row.safety ? 'warn' : row.usage > 0 && row.end >= row.usage ? 'info' : 'ok',
+    // 막대 전체 = 다음 달 쓸 수 있는 양, 채워진 부분 = 다음 달 소모 후 월말에 남는 재고
+    remainingPct: row.supply > 0 ? (Math.max(0, row.end) / row.supply) * 100 : 0,
   }))
 })
 
@@ -114,7 +120,8 @@ const receivedCount = computed(() => counts.value.RECEIVED ?? 0)
 const kpis = computed(() => {
   const inventory = data.value?.inventory
   const totalUsage = data.value?.demandForecast?.totalForecastUsageQty
-  const overall = months(inventory?.totalOnHandQty, totalUsage)
+  const p = projection.value
+  const endShort = p?.safetyQty != null && p.endQty < p.safetyQty
   const shortage = inventory?.shortageSpecCount ?? 0
   const worst = lowSizes.value[0]
   return [
@@ -135,12 +142,16 @@ const kpis = computed(() => {
       tone: 'muted',
     },
     {
-      id: 'coverage',
-      label: '재고 여유',
-      value: overall == null ? '—' : overall.toFixed(1),
-      unit: '개월분',
-      hint: worst ? `⚠ ${worst.id} ${worst.monthsText}` : '✓ 모든 규격 여유 있음',
-      tone: worst ? 'warn' : 'ok',
+      id: 'projected',
+      label: `${targetMonthLabel.value} 말 예상 재고`,
+      value: p ? number(p.endQty) : '—',
+      unit: p ? '개' : '',
+      hint: !p
+        ? '다음 달 제안서가 생기면 계산해요'
+        : p.safetyQty == null
+          ? '이달 남은 소모·입고 예정·주문 반영'
+          : `${endShort || worst ? '⚠' : '✓'} 안전 재고 ${number(p.safetyQty)}개 기준${worst ? ` · ${worst.id} 부족` : ''}`,
+      tone: !p ? 'muted' : endShort || worst ? 'warn' : 'ok',
     },
     {
       id: 'orders',
@@ -245,28 +256,25 @@ const costItems = computed(() => {
 
     <!-- ② 규격별 재고 vs 예측 + 비용 · 절감 -->
     <div class="dashboard__row dashboard__row--main">
-      <AppCard class="dashboard__compare" title="규격별 다음달 예측 재고량">
+      <AppCard class="dashboard__compare" :title="`규격별 ${targetMonthLabel} 말 예상 재고`">
         <ul class="compare">
           <li v-for="size in sizes" :key="size.id" class="compare__row">
             <div class="compare__head">
               <span class="compare__label">
                 {{ size.label }}
-                <span class="compare__months">
-                  <template v-if="size.months != null">
-                    <AnimatedNumber :value="size.months.toFixed(1)" />개월분 여유
-                  </template>
-                  <template v-else>—</template>
+                <span class="compare__months" :class="`compare__months--${size.tone}`">
+                  월말 <AnimatedNumber :value="number(size.end)" />개
                 </span>
               </span>
               <span class="compare__value">
-                <span class="compare__usage">예측 <AnimatedNumber :value="number(size.usage)" /></span>
-                / 현재 <AnimatedNumber :value="number(size.stock)" />개
+                <span class="compare__usage">소모 <AnimatedNumber :value="number(size.usage)" /></span>
+                / 쓸 수 있는 양 <AnimatedNumber :value="number(size.supply)" />개
               </span>
             </div>
             <div
               class="stock-bar"
               role="img"
-              :aria-label="`${size.label} 현재 ${number(size.stock)}개 중 다음 달 예측 ${number(size.usage)}개, 남는 재고 ${number(size.remaining)}개`"
+              :aria-label="`${size.label} 다음 달 쓸 수 있는 ${number(size.supply)}개 중 소모 ${number(size.usage)}개, 월말 ${number(size.end)}개`"
             >
               <span class="stock-bar__left" :style="{ width: `${size.remainingPct}%` }" />
             </div>
@@ -274,8 +282,10 @@ const costItems = computed(() => {
         </ul>
         <p v-if="!sizes.length" class="empty">규격별 재고·예측 데이터가 아직 없어요.</p>
         <p class="compare__note">
-          <span><strong class="compare__key">채워진 부분</strong> = 다음 달 예측량을 쓰고 남는 재고</span>
-          <span>재고 여유 = 현재 재고 ÷ 다음 달 예측</span>
+          <span><strong class="compare__key">채워진 부분</strong> = 다음 달 소모 후 월말에 남는 재고</span>
+          <span v-if="projection">
+            쓸 수 있는 양 = 현재 재고 − 이달 남은 소모({{ projection.remainingDays }}일) + 입고 예정 + 남은 주문
+          </span>
         </p>
       </AppCard>
 
@@ -546,12 +556,17 @@ const costItems = computed(() => {
   font-weight: 600;
 }
 
-/* 규격 이름 옆에 재고 여유(몇 개월분)를 작게 붙입니다. */
+/* 규격 이름 옆에 월말 예상 재고를 작게 붙입니다. 안전 재고보다 적으면 경고색 */
 .compare__months {
   color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.compare__months--warn {
+  color: var(--color-warning-text);
+  font-weight: 700;
 }
 
 .compare__value {
