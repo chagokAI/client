@@ -330,6 +330,43 @@ export class World {
     return this.flights.some((f) => !f.done && (!line || f.line === line))
   }
 
+  /** 라이브에서는 현재 트럭과 최근 완료 트럭만 남기고, 개별 자원·선택 참조도 함께 정리한다. */
+  pruneTrucks(line, keep = 4) {
+    if (this.busy(line) || line.trucks.length <= keep) return
+    const expired = line.trucks.splice(0, line.trucks.length - keep)
+    const removed = new Set()
+    for (const truck of expired) truck.group.traverse((node) => removed.add(node))
+    this.selectables = this.selectables.filter((node) => !removed.has(node))
+    line.packed = line.packed.filter((packed) => !removed.has(packed.group))
+    const shared = new Set([...shellGeo.values()].flatMap(({ geo, edges }) => [geo, edges]))
+    const disposed = new Set()
+    for (const node of removed) {
+      // 상자 형상·물품 재질·Sprite 형상은 남은 트럭과 공유하므로 트럭별로 해제하지 않는다.
+      if (node.geometry && !node.isSprite && !shared.has(node.geometry) && !disposed.has(node.geometry)) {
+        disposed.add(node.geometry)
+        node.geometry.dispose()
+      }
+      for (const material of [].concat(node.material ?? [])) {
+        if (material === itemMat || disposed.has(material)) continue
+        disposed.add(material)
+        material.map?.dispose()
+        material.dispose()
+      }
+    }
+    for (const truck of expired) line.group.remove(truck.group)
+    line.trucks.slice(0, -1).forEach((truck, i) => truck.group.position.copy(line._parkSlot(i)))
+  }
+
+  /** 장면을 유지한 채 진열대 재고 숫자만 서버 값으로 맞춘다(라이브의 입고·실사 snapshot). */
+  setRackStock(stockByCode) {
+    for (const line of this.lines)
+      for (const [code, it] of Object.entries(line.rack?.items ?? {})) {
+        if (!(code in stockByCode)) continue
+        it.stock = stockByCode[code]
+        line._relabel(code, it)
+      }
+  }
+
   _tick() {
     const dt = Math.min(this.clock.getDelta(), 0.1)
     for (const f of this.flights) {
@@ -679,7 +716,7 @@ class Line {
 
   _rackLabel(code, stock) {
     const tag = this.world.isNew?.has(code) ? '★ 신규\n' : ''
-    return textSprite(`${tag}${code}\n재고 ${stock.toLocaleString('ko-KR')}`, {
+    return textSprite(`${tag}${code}\n재고 ${stock == null ? '미입력' : stock.toLocaleString('ko-KR')}`, {
       size: 44,
       ...(tag ? { color: '#ffe29a', border: 'rgba(255,209,102,0.9)' } : {}),
     })

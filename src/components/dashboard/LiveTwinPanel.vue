@@ -53,8 +53,7 @@ async function close() {
   animating = false
 }
 
-// 재생/정지: 시뮬레이션 코드는 그대로 두고, 시뮬레이션 안에 있는 '재생' 버튼(#play)을 대신 눌러 줍니다.
-// 아직 불러온 구간이 없으면(#play 비활성) 기본 구간을 먼저 불러오고(#load), 불러오기가 끝나면 이어서 재생합니다.
+// 카드 재생은 라이브 탭의 입력 상태 확인 후 서버 입력을 시작한다. 전체 화면에서도 같은 인스턴스를 사용한다.
 const playing = ref(false)
 const preparing = ref(false)
 let twinPlay = null
@@ -62,8 +61,17 @@ let twinStatus = null
 let observer = null
 
 function syncPlayState() {
+  twinPlay = frame.value?.querySelector('#livePlay') ?? frame.value?.querySelector('#play') ?? null
+  twinStatus = frame.value?.querySelector('#status') ?? null
   playing.value = twinPlay?.textContent.includes('일시정지') ?? false
   if (!preparing.value || !twinPlay) return
+  if (twinPlay.id === 'livePlay') {
+    const phase = twinPlay.dataset.phase
+    if (phase === 'loading') return
+    preparing.value = false
+    if (phase === 'paused') twinPlay.click()
+    return
+  }
   if (!twinPlay.disabled) {
     preparing.value = false
     twinPlay.click()
@@ -74,6 +82,24 @@ function syncPlayState() {
 }
 
 function togglePlay() {
+  const livePlay = frame.value?.querySelector('#livePlay')
+  if (livePlay) {
+    if (livePlay.dataset.phase === 'loading') preparing.value = true
+    else livePlay.click()
+    return
+  }
+  const liveTab = frame.value?.querySelector('[data-tab="live"]')
+  if (liveTab) {
+    preparing.value = true
+    liveTab.click()
+    nextTick(() => {
+      twinPlay = frame.value?.querySelector('#livePlay') ?? null
+      if (twinPlay)
+        observer?.observe(twinPlay, { attributes: true, childList: true, characterData: true, subtree: true })
+      syncPlayState()
+    })
+    return
+  }
   if (!twinPlay || preparing.value) return
   if (!twinPlay.disabled) return twinPlay.click()
   preparing.value = true
@@ -84,9 +110,8 @@ onMounted(() => {
   twinPlay = frame.value?.querySelector('#play') ?? null
   twinStatus = frame.value?.querySelector('#status') ?? null
   observer = new MutationObserver(syncPlayState)
-  for (const el of [twinPlay, twinStatus]) {
-    if (el) observer.observe(el, { attributes: true, childList: true, characterData: true, subtree: true })
-  }
+  if (frame.value)
+    observer.observe(frame.value, { attributes: true, childList: true, characterData: true, subtree: true })
   syncPlayState()
 })
 
@@ -119,7 +144,7 @@ onBeforeUnmount(() => {
           class="live__icon-button"
           size="sm"
           :disabled="preparing"
-          :aria-label="preparing ? '구간 불러오는 중' : playing ? '시뮬레이션 정지' : '시뮬레이션 재생'"
+          :aria-label="preparing ? '연결 중' : playing ? '라이브 일시정지' : '라이브 재생'"
           :aria-pressed="playing"
           :title="preparing ? '구간 불러오는 중' : playing ? '정지' : '재생'"
           @click="togglePlay"
@@ -163,7 +188,7 @@ onBeforeUnmount(() => {
             </div>
             <AppButton size="sm" @click="close">닫기</AppButton>
           </div>
-          <DigitalTwinViewer />
+          <DigitalTwinViewer initial-mode="live" />
           <button
             v-if="!expanded"
             class="live__open"
