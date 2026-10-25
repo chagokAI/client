@@ -3,6 +3,7 @@ import { ORDER, currency, date, dimensions, number, person, quantity, time } fro
 
 export function orderDetail(o) {
   return {
+    id: o.id,
     number: o.poNo,
     status: o.status,
     statusLabel: ORDER[o.status],

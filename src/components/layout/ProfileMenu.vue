@@ -13,11 +13,10 @@ const currentUser = computed(() => ({
   team: auth.session.value?.department ?? '',
   role: { OPERATOR: '운영자', DIRECTOR: '관리자' }[auth.session.value?.role] ?? '',
 }))
-// 컨트롤 타워는 서버 센터 목록에 없는 화면 전용 선택지입니다.
-const centerOptions = computed(() => [
-  ...(auth.session.value?.warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
-  { value: 'control-tower', label: '컨트롤 타워' },
-])
+// 로그인한 직원이 접근할 수 있는 센터(/auth/me 의 warehouses)만 보여 줍니다.
+const centerOptions = computed(() =>
+  (auth.session.value?.warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
+)
 
 defineProps({
   centerId: {

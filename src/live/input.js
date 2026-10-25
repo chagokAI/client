@@ -1,5 +1,5 @@
-// 재생은 읽기 구독과 구별되는 서버 명령이다. 시작과 화면 이탈의 정지 요청도 같은 순서로 보낸다.
-// 같은 페이지에서 탭을 떠났다가 돌아와도 이전 화면의 정지가 새 시작 뒤로 밀리지 않는다.
+// 재생은 읽기 구독과 구별되는 서버 명령이다. 시작과 제어 세션 종료의 정지 요청도 같은 순서로 보낸다.
+// SPA 페이지 이동은 session.js가 제어기를 유지하고, 브라우저 종료·로그아웃 때 dispose한다.
 let serial = Promise.resolve()
 export function createLiveInputControl(read, write, changed) {
   const controlId = globalThis.crypto.randomUUID()

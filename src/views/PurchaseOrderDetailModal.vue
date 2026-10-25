@@ -1,12 +1,15 @@
 <script setup>
 import AppButton from '@/components/common/AppButton.vue'
+import AppToast from '@/components/common/AppToast.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import StepProgress from '@/components/common/StepProgress.vue'
+import { warehouseDownload } from '@/stores/auth'
+import { useSaveAction } from '@/composables/useSaveAction'
 const purchaseOrderSteps = ['제안서 생성', '발주서 작성', '승인 완료', '입고 완료']
 
-defineProps({
+const props = defineProps({
   detail: {
     type: Object,
     required: true,
@@ -24,8 +27,13 @@ const columns = [
   { key: 'amount', label: '금액', width: '22%', align: 'right' },
 ]
 
+const { saving: downloading, toastMessage, run } = useSaveAction()
+
+// 서버가 만든 발주서 PDF를 그대로 내려받습니다. 파일명은 응답 헤더(filename*)를 따릅니다.
 function downloadPdf() {
-  // TODO: 발주서 PDF 다운로드 API에 연결합니다.
+  return run(() =>
+    warehouseDownload(`/purchase-orders/${props.detail.id}/pdf`, { filename: `발주서_${props.detail.number}.pdf` }),
+  )
 }
 </script>
 
@@ -62,11 +70,13 @@ function downloadPdf() {
     </div>
 
     <template #footer>
-      <button class="detail-download" type="button" disabled title="PDF 다운로드는 준비 중이에요">
-        <span aria-hidden="true">↓</span> PDF 다운로드
+      <button class="detail-download" type="button" :disabled="downloading" @click="downloadPdf">
+        <span aria-hidden="true">↓</span> {{ downloading ? 'PDF 만드는 중…' : 'PDF 다운로드' }}
       </button>
       <AppButton @click="emit('close')">닫기</AppButton>
     </template>
+
+    <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </BaseModal>
 </template>
 

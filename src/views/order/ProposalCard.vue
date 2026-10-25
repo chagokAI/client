@@ -49,12 +49,10 @@ function onFrameMessage(event) {
 onMounted(() => window.addEventListener('message', onFrameMessage))
 onBeforeUnmount(() => window.removeEventListener('message', onFrameMessage))
 
-// 제안서는 처음에 접어 두고, [제안서 생성하기]를 누른 뒤부터 보여 줍니다.
-const expanded = ref(false)
-const shown = computed(() => (props.readonly || expanded.value) && Boolean(props.proposal))
+// 재방문·새로고침에서도 서버에 저장된 제안서를 바로 보여 줍니다.
+const shown = computed(() => Boolean(props.proposal))
 
 function generate() {
-  expanded.value = true
   emit('run-job')
 }
 
@@ -199,18 +197,11 @@ const effectColumns = [
       </ul>
     </template>
 
-    <div v-else-if="!expanded && !jobRunning" class="empty-state">
-      <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서를 만들어 보세요.</p>
-      <p class="empty-state__text">
+    <div v-else-if="loaded && !jobRunning && !reviewing" class="empty-state">
+      <p class="empty-state__title">{{ Number((viewMonth || targetMonth).slice(5)) }}월 제안서가 아직 없어요.</p>
+      <p v-if="!readonly" class="empty-state__text">
         [제안서 생성하기]를 누르면 AI 에이전트가 최근 출고 이력으로 주문 수량과 신규 규격을 분석해 초안을 만들어요.
         초안을 승인하면 제안서로 저장돼요.
-      </p>
-    </div>
-
-    <div v-else-if="loaded && !jobRunning" class="empty-state">
-      <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
-      <p class="empty-state__text">
-        활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요. 등록 후 다시 눌러 주세요.
       </p>
     </div>
 

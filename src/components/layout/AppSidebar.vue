@@ -8,6 +8,7 @@ import { auth } from '@/stores/auth'
 import { notifications as notificationStore, notificationTarget } from '@/stores/notifications'
 import { useNotificationSetting } from '@/composables/useNotificationSetting'
 import { useSidebar } from '@/composables/useSidebar'
+import { useToast } from '@/composables/useToast'
 
 const { isCollapsed, isMobileOpen, toggle, expand, openMobile, closeMobile } = useSidebar()
 const route = useRoute()
@@ -15,6 +16,8 @@ const router = useRouter()
 
 const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
+// 관리자(DIRECTOR)는 본부장, 그 외는 센터장으로 부릅니다.
+const greeting = computed(() => `안녕하세요, ${auth.isAdmin.value ? '본부장님' : '센터장님'}`)
 
 // adminOnly 항목은 DIRECTOR 에게만, 나머지는 DIRECTOR 가 아닌 역할에게만 보입니다.
 // 두 묶음은 겹치지 않습니다. 라우트도 meta.admin·meta.operator 로 함께 막습니다.
@@ -44,7 +47,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/admin/dashboard',
-    label: '실시간 센터 현황(관리자)',
+    label: '실시간 센터 현황',
     icon: 'M10 2.5 16 5v4.8c0 3.4-2.4 6.1-6 7.2-3.6-1.1-6-3.8-6-7.2V5l6-2.5Zm-2.4 7.2 1.8 1.8 3.2-3.3',
     adminOnly: true,
   },
@@ -59,7 +62,6 @@ const NAV_ITEMS = [
 const navItems = computed(() => NAV_ITEMS.filter((item) => !!item.adminOnly === auth.isAdmin.value))
 const homePath = auth.homePath
 
-// 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
 const openGroups = ref(NAV_ITEMS.filter((item) => item.children).map((item) => item.label))
 
 function hasActiveChild(item) {
@@ -99,31 +101,25 @@ const { items: notifications, unreadCount, saving: notificationsSaving, error: n
 // 알림을 끄면 벨의 안 읽은 건수 배지를 숨깁니다. 벨을 눌러 목록을 보는 것은 그대로 됩니다.
 const { isEnabled: notificationsEnabled } = useNotificationSetting()
 const visibleUnreadCount = computed(() => (notificationsEnabled.value ? unreadCount.value : 0))
-const toastMessage = ref('')
+const { toastMessage, report } = useToast()
 const isPanelOpen = ref(false)
 const isProfileOpen = ref(false)
 const bellArea = useTemplateRef('bellArea')
 const profileArea = useTemplateRef('profileArea')
 
-async function markAllAsRead() {
-  try {
-    await notificationStore.markAllRead()
-  } catch (error) {
-    toastMessage.value = error.message
-  }
+function markAllAsRead() {
+  return report(() => notificationStore.markAllRead())
 }
 
-async function openNotification(item) {
-  try {
+function openNotification(item) {
+  return report(async () => {
     await notificationStore.markRead(item)
     const target = notificationTarget(item.link)
     if (target) {
       isPanelOpen.value = false
       router.push(target)
     }
-  } catch (error) {
-    toastMessage.value = error.message
-  }
+  })
 }
 
 function handleViewAll() {
@@ -370,7 +366,7 @@ onBeforeUnmount(() => {
             @click="toggleProfile"
           >
             <span class="sidebar__avatar" />
-            <span class="sidebar__label sidebar__label--name">안녕하세요, 센터장님</span>
+            <span class="sidebar__label sidebar__label--name">{{ greeting }}</span>
           </button>
 
           <div v-if="isProfileOpen" class="sidebar__panel">

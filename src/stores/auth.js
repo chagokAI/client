@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { api, clearCsrf } from '../api/client.js'
+import { api, clearCsrf, downloadFile } from '../api/client.js'
 
 const session = ref(null)
 let checked = false
@@ -62,4 +62,10 @@ export const auth = {
 export function warehouseApi(path, options) {
   if (!auth.warehouseId.value) throw new Error('로그인한 센터를 확인해 주세요.')
   return api(`/warehouses/${auth.warehouseId.value}${path}`, options)
+}
+
+/** 센터 범위의 파일 내려받기(발주서 PDF 등). 응답이 JSON 이 아니라 파일이라 downloadFile 을 씁니다. */
+export function warehouseDownload(path, options) {
+  if (!auth.warehouseId.value) throw new Error('로그인한 센터를 확인해 주세요.')
+  return downloadFile(`/warehouses/${auth.warehouseId.value}${path}`, options)
 }
