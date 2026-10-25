@@ -32,6 +32,8 @@ export function boxStockRow(b) {
     statusLabel: b.isActive ? '사용 중' : '미사용',
     onHandQty: stock.onHandQty,
     safetyQty: stock.safetyQty,
+    configuredSafetyQty: Object.hasOwn(stock, 'configuredSafetyQty') ? stock.configuredSafetyQty : stock.safetyQty,
+    configuredTargetQty: Object.hasOwn(stock, 'configuredTargetQty') ? stock.configuredTargetQty : stock.targetQty,
     current: quantity(stock.onHandQty),
     safety: quantity(stock.safetyQty),
     level: stock.stockLevelPct,
