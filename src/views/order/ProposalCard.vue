@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import SelectField from '@/components/common/SelectField.vue'
 import { auth } from '@/stores/auth'
 
 // 다음 달 주문 제안서 카드. 제안서 생성 · 발주서 반영을 맡습니다.
@@ -17,13 +18,40 @@ const props = defineProps({
   jobRunning: Boolean,
   jobFailed: Boolean,
   jobNotice: { type: String, default: '' },
+  // AI 에이전트 작업이 승인 대기인지, 그 초안 { html, totalAmount, newSpecs }
+  reviewing: Boolean,
+  review: { type: Object, default: null },
+  // 에이전트가 끝낸 단계 결과 문장 [{ id, text }]와 진행 단계 { done, total }
+  progress: { type: Array, default: () => [] },
+  stepCount: { type: Object, default: () => ({ done: 0, total: 0 }) },
+  // 대상 월 드롭다운 { value, label }[]과 보고 있는 월. 지난 달 제안서는 보기 전용(readonly)입니다.
+  monthOptions: { type: Array, default: () => [] },
+  viewMonth: { type: String, default: '' },
+  readonly: Boolean,
 })
 
-const emit = defineEmits(['run-job', 'apply'])
+const emit = defineEmits(['run-job', 'apply', 'decide', 'update:viewMonth'])
+
+// 반려는 다시 작성할 방향이 필요해 의견을 받아야 보냅니다.
+const comment = ref('')
+function decide(decision) {
+  emit('decide', { decision, comment: comment.value.trim() })
+  comment.value = ''
+}
+
+// 제안서 HTML 이 보내 주는 내용 높이만큼 틀을 늘려 안쪽 스크롤 없이 보여 줍니다.
+const frame = ref(null)
+const frameHeight = ref(560)
+function onFrameMessage(event) {
+  if (event.source !== frame.value?.contentWindow || event.data?.type !== 'chagok-proposal-height') return
+  frameHeight.value = Math.max(320, Math.ceil(event.data.height))
+}
+onMounted(() => window.addEventListener('message', onFrameMessage))
+onBeforeUnmount(() => window.removeEventListener('message', onFrameMessage))
 
 // 제안서는 처음에 접어 두고, [제안서 생성하기]를 누른 뒤부터 보여 줍니다.
 const expanded = ref(false)
-const shown = computed(() => expanded.value && Boolean(props.proposal))
+const shown = computed(() => (props.readonly || expanded.value) && Boolean(props.proposal))
 
 function generate() {
   expanded.value = true
@@ -49,14 +77,76 @@ const effectColumns = [
 <template>
   <AppCard class="proposal" title="박스 주문 제안서">
     <template #actions>
-      <span v-if="shown" class="card-meta">{{ proposal.createdAt }}</span>
+      <div class="proposal__header">
+        <span v-if="shown" class="card-meta">{{ proposal.createdAt }}</span>
+        <SelectField
+          v-if="monthOptions.length > 1"
+          :model-value="viewMonth"
+          :options="monthOptions"
+          aria-label="제안서 대상 월"
+          width="150px"
+          @update:model-value="emit('update:viewMonth', $event)"
+        />
+      </div>
     </template>
 
-    <p v-if="jobNotice" class="job-notice" :class="{ 'job-notice--error': jobFailed }" role="status">
+    <p v-if="jobNotice && !readonly" class="job-notice" :class="{ 'job-notice--error': jobFailed }" role="status">
       {{ jobNotice }}
     </p>
 
-    <template v-if="shown">
+    <section v-if="jobRunning && progress.length && !readonly" class="progress" aria-label="AI 에이전트 진행 상황">
+      <p v-if="stepCount.total" class="progress__count">{{ stepCount.done }}/{{ stepCount.total }} 단계</p>
+      <ol class="progress__list">
+        <li v-for="item in progress" :key="item.id">{{ item.text }}</li>
+      </ol>
+    </section>
+
+    <section v-if="reviewing && !readonly" class="review" aria-label="승인 대기 제안서 초안">
+      <iframe
+        v-if="review?.html"
+        ref="frame"
+        class="review__frame"
+        :style="{ height: `${frameHeight}px` }"
+        title="박스 주문 제안서 초안"
+        sandbox="allow-scripts"
+        :srcdoc="review.html"
+      />
+      <p v-else class="review__empty">초안을 불러오는 중이에요. 잠시 후에도 보이지 않으면 새로 고침해 주세요.</p>
+      <textarea
+        v-model="comment"
+        class="review__comment"
+        rows="2"
+        maxlength="500"
+        placeholder="반려 의견 (예: 맞춤 규격은 빼고 기성품만 제안해 주세요)"
+        :disabled="!auth.canEdit.value || busy"
+      />
+      <div class="proposal__actions">
+        <AppButton
+          variant="secondary"
+          block
+          :disabled="!auth.canEdit.value || busy || !comment.trim()"
+          @click="decide('REJECTED')"
+        >
+          반려하고 다시 작성
+        </AppButton>
+        <AppButton variant="primary" block :disabled="!auth.canEdit.value || busy" @click="decide('APPROVED')">
+          승인하고 발주서 만들기
+        </AppButton>
+      </div>
+    </section>
+
+    <!-- 에이전트 제안서는 확정 양식 HTML 하나로 보여 준다(표·근거를 따로 그리지 않음) -->
+    <iframe
+      v-else-if="shown && proposal.html"
+      ref="frame"
+      class="review__frame"
+      :style="{ height: `${frameHeight}px` }"
+      title="박스 주문 제안서"
+      sandbox="allow-scripts"
+      :srcdoc="proposal.html"
+    />
+
+    <template v-else-if="shown">
       <div class="proposal__headline">
         <p class="proposal__headline-text">{{ proposal.headline }}</p>
         <p class="proposal__headline-sub">{{ proposal.subline }}</p>
@@ -109,24 +199,29 @@ const effectColumns = [
       </ul>
     </template>
 
-    <div v-else-if="!expanded" class="empty-state">
+    <div v-else-if="!expanded && !jobRunning" class="empty-state">
       <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서를 만들어 보세요.</p>
       <p class="empty-state__text">
-        [제안서 생성하기]를 누르면 최근 관측 이력으로 제안서를 만들어요. 활성 규격과 현재 재고·안전 재고·단가가 등록되어
-        있어야 계산할 수 있어요.
+        [제안서 생성하기]를 누르면 AI 에이전트가 최근 출고 이력으로 주문 수량과 신규 규격을 분석해 초안을 만들어요.
+        초안을 승인하면 제안서로 저장돼요.
       </p>
     </div>
 
-    <div v-else-if="loaded" class="empty-state">
+    <div v-else-if="loaded && !jobRunning" class="empty-state">
       <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
       <p class="empty-state__text">
         활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요. 등록 후 다시 눌러 주세요.
       </p>
     </div>
 
-    <div class="proposal__actions">
-      <AppButton variant="primary" block :disabled="!auth.canEdit.value || busy || jobRunning" @click="generate">
-        {{ jobRunning ? '계산 중…' : '제안서 생성하기' }}
+    <div v-if="!reviewing && !readonly" class="proposal__actions">
+      <AppButton
+        variant="primary"
+        block
+        :disabled="!auth.canEdit.value || busy || jobRunning || reviewing"
+        @click="generate"
+      >
+        {{ jobRunning ? 'AI 에이전트 작업 중…' : reviewing ? '승인 대기 중' : '제안서 생성하기' }}
       </AppButton>
       <AppButton
         variant="secondary"
@@ -149,6 +244,80 @@ const effectColumns = [
   font-size: 11px;
   line-height: 1.5;
   text-align: center;
+}
+
+.proposal__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 에이전트 진행 상황 */
+.progress {
+  margin-bottom: 16px;
+}
+
+.progress__count {
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.progress__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.progress__list li {
+  position: relative;
+  padding-left: 18px;
+  word-break: keep-all;
+}
+
+.progress__list li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--color-gold);
+  font-weight: 700;
+}
+
+/* 승인 대기 초안 */
+.review {
+  margin-bottom: 20px;
+}
+
+.review__frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #fff;
+}
+
+.review__empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.review__comment {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
 }
 
 /* 계산 작업 상태 */

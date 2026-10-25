@@ -82,6 +82,8 @@ function agentProposalModel(p, view) {
     totalAmount: view.totalAmount,
     effect: view.newSpecEffect?.rows?.length ? view.newSpecEffect : null,
     sources: view.sources ?? [],
+    // 에이전트가 확정 양식으로 만든 제안서 HTML. 있으면 화면은 이것만 보여 준다(표·근거를 따로 그리지 않음)
+    html: p.analysis?.bodyHtml ?? '',
   }
 }
 
