@@ -301,24 +301,26 @@ const costItems = computed(() => {
       </AppCard>
 
       <AppCard class="dashboard__orders" title="최근 발주" meta="최근 3개월">
-        <table v-if="recentOrders.length" class="orders">
-          <thead>
-            <tr>
-              <th scope="col">발주일</th>
-              <th scope="col">규격</th>
-              <th scope="col" class="orders__num">금액(원)</th>
-              <th scope="col" class="orders__status">상태</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="order in recentOrders" :key="order.id" :title="`${order.number} · ${order.quantity}`">
-              <td>{{ order.orderedShort }}</td>
-              <td class="orders__spec">{{ order.specs }}</td>
-              <td class="orders__num">{{ order.amountNumber }}</td>
-              <td class="orders__status"><StatusBadge :label="order.statusLabel" :tone="order.tone" /></td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-if="recentOrders.length" class="orders__scroll">
+          <table class="orders">
+            <thead>
+              <tr>
+                <th scope="col">발주일</th>
+                <th scope="col">규격</th>
+                <th scope="col" class="orders__num">금액(원)</th>
+                <th scope="col" class="orders__status">상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in recentOrders" :key="order.id" :title="`${order.number} · ${order.quantity}`">
+                <td>{{ order.orderedShort }}</td>
+                <td class="orders__spec">{{ order.specs }}</td>
+                <td class="orders__num">{{ order.amountNumber }}</td>
+                <td class="orders__status"><StatusBadge :label="order.statusLabel" :tone="order.tone" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">최근 3개월 동안의 발주 내역이 없어요.</p>
         <RouterLink class="orders__more" to="/purchase-orders">
           발주서 이력 보기 <span aria-hidden="true">→</span>
@@ -621,8 +623,37 @@ const costItems = computed(() => {
 }
 
 /* ③ 최근 발주 표 */
+/* 카드가 좁아지면 열을 찌그러뜨리지 않고 이 칸만 가로로 스크롤합니다. */
+/* 스크롤바는 DataTable(공통 표)과 같은 베이지 계열로 맞춥니다. */
+.orders__scroll {
+  overflow-x: auto;
+  min-width: 0;
+  scrollbar-color: var(--color-border) var(--color-cream);
+  scrollbar-width: thin;
+}
+
+.orders__scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.orders__scroll::-webkit-scrollbar-track {
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-cream);
+}
+
+.orders__scroll::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-cream);
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.orders__scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
 .orders {
   width: 100%;
+  min-width: 360px;
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -633,12 +664,15 @@ const costItems = computed(() => {
   color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 600;
-  text-align: left;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .orders td {
   padding: 11px 8px;
   border-bottom: 1px solid var(--color-divider);
+  text-align: center;
+  white-space: nowrap;
 }
 
 .orders tr:last-child td {
@@ -663,13 +697,11 @@ const costItems = computed(() => {
 }
 
 .orders__num {
-  text-align: right !important;
   font-weight: 600;
 }
 
 .orders__status {
   width: 76px;
-  text-align: right !important;
 }
 
 .orders__more {
