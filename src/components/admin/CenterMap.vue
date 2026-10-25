@@ -10,6 +10,8 @@ const props = defineProps({
   centers: { type: Array, default: () => [] },
   // 선택된 센터의 warehouseId. 해당 핀을 크게 강조합니다.
   selectedId: { type: [String, Number], default: null },
+  // 지도 오른쪽을 덮는 패널 너비(px). 선택한 핀이 그 아래로 숨으면 보이는 곳으로 지도를 옮깁니다.
+  rightInset: { type: Number, default: 0 },
 })
 const emit = defineEmits(['select'])
 
@@ -70,6 +72,8 @@ function drawPins() {
 
 onMounted(() => {
   map = L.map(el.value, { scrollWheelZoom: true, zoomSnap: 0.25 }).setView(KOREA_CENTER, KOREA_ZOOM)
+  // 오른쪽은 패널이 덮을 수 있으므로 저작권 표기를 왼쪽 아래로 옮깁니다.
+  map.attributionControl.setPosition('bottomleft')
   // CARTO Voyager(라벨 없음): 바다·녹지·도로 색은 살아 있고 글자만 빠진 스타일입니다.
   // 2026-09-25 부터 래스터 타일은 키가 있어야 합니다. 키가 없으면 워터마크만 보입니다.
   L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`, {
@@ -104,6 +108,15 @@ watch(
     })
   },
 )
+
+// 선택한 핀이 패널 아래에 깔리면, 패널을 뺀 나머지 영역의 가운데로 지도를 밀어 줍니다.
+watch([() => props.selectedId, () => props.rightInset], () => {
+  const marker = markers.get(props.selectedId)
+  if (!map || !marker || !props.rightInset) return
+  const visibleWidth = map.getSize().x - props.rightInset
+  const point = map.latLngToContainerPoint(marker.getLatLng())
+  if (point.x > visibleWidth - 40) map.panBy([point.x - visibleWidth / 2, 0])
+})
 
 onBeforeUnmount(() => {
   observer?.disconnect()

@@ -37,6 +37,16 @@ function selectByName(name) {
   if (center) selectedId.value = center.warehouseId
 }
 
+// 오른쪽 패널은 지도 위에 겹치는 드로어입니다. 처음엔 닫혀 있고, 핀을 누르면 열립니다.
+// 너비는 CSS 의 .drawer 너비(380px)와 같게 맞춥니다. 지도가 선택한 핀을 드로어 밖으로 옮길 때 씁니다.
+const DRAWER_WIDTH = 380
+const drawerOpen = ref(false)
+
+function onSelect(id) {
+  selectedId.value = id
+  if (id) drawerOpen.value = true
+}
+
 const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`
 const signedWon = (n) => `${n >= 0 ? '+' : '−'}${won(Math.abs(n))}`
 const kg = (n) => `${Math.round(n).toLocaleString('ko-KR')} kg`
@@ -52,176 +62,194 @@ const centerFill = computed(() => {
 <template>
   <div class="admin-dashboard">
     <PageHeader
-      title="실시간 센터 현황 (관리자)"
+      title="실시간 센터 현황"
       description="전체 센터의 운영 성과와 조치가 필요한 항목을 한곳에서 확인합니다."
     />
 
     <ApiState :loading="loading" :error="error" @retry="refresh" />
 
-    <div class="admin-dashboard__columns">
+    <div class="admin-dashboard__stage">
       <!-- 지도는 카드 장식 없이 영역을 꽉 채웁니다. -->
       <CenterMap
         class="admin-dashboard__map"
         :centers="centers"
         :selected-id="selectedId"
-        @select="selectedId = $event"
+        :right-inset="drawerOpen ? DRAWER_WIDTH : 0"
+        @select="onSelect"
       />
 
-      <div class="admin-dashboard__side">
-        <div class="scope">
-          <div class="scope__text">
-            <p class="scope__eyebrow">
-              {{ selectedCenter ? '선택한 센터' : '본부 전체 요약' }} · {{ reportSummary.month }} 리포트
-            </p>
-            <p class="scope__name">{{ selectedCenter?.name ?? '전체 센터' }}</p>
-          </div>
-          <button v-if="selectedCenter" type="button" class="scope__reset" @click="selectedId = null">전체 보기</button>
-        </div>
+      <div class="drawer" :class="{ 'drawer--open': drawerOpen }">
+        <!-- 손잡이는 드로어 왼쪽 가장자리에 붙어 함께 움직입니다. -->
+        <button
+          type="button"
+          class="drawer__toggle"
+          aria-controls="center-drawer"
+          :aria-expanded="drawerOpen"
+          :aria-label="drawerOpen ? '센터 현황 패널 닫기' : '센터 현황 패널 열기'"
+          @click="drawerOpen = !drawerOpen"
+        >
+          <svg class="drawer__chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
 
-        <!-- 본부 전체 요약 -->
-        <template v-if="!selectedCenter">
-          <AppCard title="절감 효과" meta="박스비 + 운임">
-            <div class="figure">
-              <p class="figure__label">이번 달 · 전월 대비</p>
-              <p class="figure__value">{{ signedWon(reportSummary.monthSaving) }}</p>
-              <p class="figure__sub">연 {{ reportSummary.annualSavingLabel }} 추정</p>
-            </div>
-            <dl class="stats">
-              <div>
-                <dt>누적 절감 <small>11~1월</small></dt>
-                <dd>{{ won(reportSummary.cumulativeSaving) }}</dd>
-              </div>
-              <div>
-                <dt>1년 예상</dt>
-                <dd>{{ reportSummary.yearSavingLabel }}</dd>
-              </div>
-              <div>
-                <dt>누적 탄소 감축</dt>
-                <dd>{{ kg(reportSummary.cumulativeCarbonKg) }}</dd>
-              </div>
-              <div>
-                <dt>평균 충진율</dt>
-                <dd>{{ reportSummary.fillRate.from }} → {{ reportSummary.fillRate.to }}%</dd>
-              </div>
-            </dl>
-          </AppCard>
-
-          <AppCard title="센터 판정" :meta="`목표 충진율 ${FILL_TARGET}%`">
-            <ul class="counts">
-              <li v-for="(meta, key) in STATUS" :key="key" class="counts__item" :class="`counts__item--${key}`">
-                <span>{{ meta.label }}</span>
-                <strong>{{ reportSummary.counts[key] }}<small>곳</small></strong>
-              </li>
-            </ul>
-
-            <h3 class="subhead">이번 달 재실행</h3>
-            <ul v-if="reruns.length" class="rerun">
-              <li v-for="item in reruns" :key="item.center">
-                <button type="button" class="rerun__item" @click="selectByName(item.center)">
-                  <span class="rerun__text">
-                    <span class="rerun__title">{{ item.center }}</span>
-                    <span class="rerun__detail">
-                      충진율 {{ item.before.toFixed(1) }} → {{ item.after.toFixed(1) }}% · 신규 규격 {{ item.added }}종
-                    </span>
-                  </span>
-                  <StatusBadge :label="STATUS[item.status].label" :tone="STATUS[item.status].tone" />
-                </button>
-              </li>
-            </ul>
-            <p v-else class="empty">이번 달 재실행한 센터가 없습니다.</p>
-          </AppCard>
-        </template>
-
-        <!-- 선택한 센터 -->
-        <template v-else-if="selectedReport">
-          <AppCard title="충진율">
-            <template #actions>
-              <StatusBadge :label="STATUS[selectedReport.status].label" :tone="STATUS[selectedReport.status].tone" />
-            </template>
-            <div class="figure">
-              <p class="figure__label">{{ STATUS[selectedReport.status].reason }}</p>
-              <p class="figure__value">
-                {{ centerFill.now.toFixed(1) }}%
-                <span class="delta" :class="{ 'delta--flat': centerFill.delta === 0 }">
-                  {{ pointDelta(centerFill.delta) }}
-                </span>
+        <div id="center-drawer" class="admin-dashboard__side" :inert="!drawerOpen">
+          <div class="scope">
+            <div class="scope__text">
+              <p class="scope__eyebrow">
+                {{ selectedCenter ? '선택한 센터' : '본부 전체 요약' }} · {{ reportSummary.month }} 리포트
               </p>
-              <p class="figure__sub">전월 대비 · 목표 {{ FILL_TARGET }}%</p>
+              <p class="scope__name">{{ selectedCenter?.name ?? '전체 센터' }}</p>
             </div>
-            <FillRateChart
-              :base="selectedReport.base"
-              :fills="selectedReport.fills"
-              :months="REPORT_MONTHS"
-              :target="FILL_TARGET"
-            />
-          </AppCard>
+            <button v-if="selectedCenter" type="button" class="scope__reset" @click="selectedId = null">
+              전체 보기
+            </button>
+          </div>
 
-          <AppCard title="절감 효과" meta="박스비 + 운임">
-            <div class="figure">
-              <p class="figure__label">이번 달 · 전월 대비</p>
-              <p class="figure__value">{{ signedWon(selectedReport.monthSaving) }}</p>
-            </div>
-            <dl class="stats">
-              <div>
-                <dt>누적 절감 <small>11~1월</small></dt>
-                <dd>{{ won(selectedReport.cumulativeSaving) }}</dd>
+          <!-- 본부 전체 요약 -->
+          <template v-if="!selectedCenter">
+            <AppCard title="절감 효과" meta="박스비 + 운임">
+              <div class="figure">
+                <p class="figure__label">이번 달 · 전월 대비</p>
+                <p class="figure__value">{{ signedWon(reportSummary.monthSaving) }}</p>
+                <p class="figure__sub">연 {{ reportSummary.annualSavingLabel }} 추정</p>
               </div>
-              <div>
-                <dt>누적 탄소 감축</dt>
-                <dd>{{ kg(selectedReport.cumulativeCarbonKg) }}</dd>
-              </div>
-              <div>
-                <dt>출고</dt>
-                <dd>{{ selectedReport.shipments.toLocaleString('ko-KR') }}건</dd>
-              </div>
-              <div>
-                <dt>개선 반영</dt>
-                <dd>
-                  {{ selectedReport.improvements.month }}건
-                  <small>/ 누적 {{ selectedReport.improvements.total }}건</small>
-                </dd>
-              </div>
-            </dl>
-          </AppCard>
+              <dl class="stats">
+                <div>
+                  <dt>누적 절감 <small>11~1월</small></dt>
+                  <dd>{{ won(reportSummary.cumulativeSaving) }}</dd>
+                </div>
+                <div>
+                  <dt>1년 예상</dt>
+                  <dd>{{ reportSummary.yearSavingLabel }}</dd>
+                </div>
+                <div>
+                  <dt>누적 탄소 감축</dt>
+                  <dd>{{ kg(reportSummary.cumulativeCarbonKg) }}</dd>
+                </div>
+                <div>
+                  <dt>평균 충진율</dt>
+                  <dd>{{ reportSummary.fillRate.from }} → {{ reportSummary.fillRate.to }}%</dd>
+                </div>
+              </dl>
+            </AppCard>
 
-          <AppCard v-if="selectedReruns.length" title="이번 달 재실행">
-            <p v-for="item in selectedReruns" :key="item.center" class="rerun__note">
-              1차 제안 후 충진율이 {{ item.before.toFixed(1) }}%에 머물러 충진율 목표 모드로 다시 제안했습니다. 신규
-              규격 {{ item.added }}종을 반영해 <b>{{ item.after.toFixed(1) }}%</b>가 되었고, 월 비용은
-              {{ won(item.saving) }} 줄었습니다.
-            </p>
-          </AppCard>
-        </template>
+            <AppCard title="센터 판정" :meta="`목표 충진율 ${FILL_TARGET}%`">
+              <ul class="counts">
+                <li v-for="(meta, key) in STATUS" :key="key" class="counts__item" :class="`counts__item--${key}`">
+                  <span>{{ meta.label }}</span>
+                  <strong>{{ reportSummary.counts[key] }}<small>곳</small></strong>
+                </li>
+              </ul>
 
-        <div v-else class="side-empty">
-          <p class="empty">{{ reportSummary.month }} 리포트에 이 센터 데이터가 없습니다.</p>
+              <h3 class="subhead">이번 달 재실행</h3>
+              <ul v-if="reruns.length" class="rerun">
+                <li v-for="item in reruns" :key="item.center">
+                  <button type="button" class="rerun__item" @click="selectByName(item.center)">
+                    <span class="rerun__text">
+                      <span class="rerun__title">{{ item.center }}</span>
+                      <span class="rerun__detail">
+                        충진율 {{ item.before.toFixed(1) }} → {{ item.after.toFixed(1) }}% · 신규 규격
+                        {{ item.added }}종
+                      </span>
+                    </span>
+                    <StatusBadge :label="STATUS[item.status].label" :tone="STATUS[item.status].tone" />
+                  </button>
+                </li>
+              </ul>
+              <p v-else class="empty">이번 달 재실행한 센터가 없습니다.</p>
+            </AppCard>
+          </template>
+
+          <!-- 선택한 센터 -->
+          <template v-else-if="selectedReport">
+            <AppCard title="충진율">
+              <template #actions>
+                <StatusBadge :label="STATUS[selectedReport.status].label" :tone="STATUS[selectedReport.status].tone" />
+              </template>
+              <div class="figure">
+                <p class="figure__label">{{ STATUS[selectedReport.status].reason }}</p>
+                <p class="figure__value">
+                  {{ centerFill.now.toFixed(1) }}%
+                  <span class="delta" :class="{ 'delta--flat': centerFill.delta === 0 }">
+                    {{ pointDelta(centerFill.delta) }}
+                  </span>
+                </p>
+                <p class="figure__sub">전월 대비 · 목표 {{ FILL_TARGET }}%</p>
+              </div>
+              <FillRateChart
+                :base="selectedReport.base"
+                :fills="selectedReport.fills"
+                :months="REPORT_MONTHS"
+                :target="FILL_TARGET"
+              />
+            </AppCard>
+
+            <AppCard title="절감 효과" meta="박스비 + 운임">
+              <div class="figure">
+                <p class="figure__label">이번 달 · 전월 대비</p>
+                <p class="figure__value">{{ signedWon(selectedReport.monthSaving) }}</p>
+              </div>
+              <dl class="stats">
+                <div>
+                  <dt>누적 절감 <small>11~1월</small></dt>
+                  <dd>{{ won(selectedReport.cumulativeSaving) }}</dd>
+                </div>
+                <div>
+                  <dt>누적 탄소 감축</dt>
+                  <dd>{{ kg(selectedReport.cumulativeCarbonKg) }}</dd>
+                </div>
+                <div>
+                  <dt>출고</dt>
+                  <dd>{{ selectedReport.shipments.toLocaleString('ko-KR') }}건</dd>
+                </div>
+                <div>
+                  <dt>개선 반영</dt>
+                  <dd>
+                    {{ selectedReport.improvements.month }}건
+                    <small>/ 누적 {{ selectedReport.improvements.total }}건</small>
+                  </dd>
+                </div>
+              </dl>
+            </AppCard>
+
+            <AppCard v-if="selectedReruns.length" title="이번 달 재실행">
+              <p v-for="item in selectedReruns" :key="item.center" class="rerun__note">
+                1차 제안 후 충진율이 {{ item.before.toFixed(1) }}%에 머물러 충진율 목표 모드로 다시 제안했습니다. 신규
+                규격 {{ item.added }}종을 반영해 <b>{{ item.after.toFixed(1) }}%</b>가 되었고, 월 비용은
+                {{ won(item.saving) }} 줄었습니다.
+              </p>
+            </AppCard>
+          </template>
+
+          <div v-else class="side-empty">
+            <p class="empty">{{ reportSummary.month }} 리포트에 이 센터 데이터가 없습니다.</p>
+          </div>
+
+          <p class="sample-note">예시 데이터 · 본부 효율화 리포트 {{ reportSummary.month }} 기준</p>
         </div>
-
-        <p class="sample-note">예시 데이터 · 본부 효율화 리포트 {{ reportSummary.month }} 기준</p>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 좁은 화면: 지도 아래에 패널이 쌓입니다. */
-.admin-dashboard__columns {
-  display: grid;
-  gap: 20px;
+/* 지도가 영역 전체를 차지하고, 패널은 그 위 오른쪽에서 드로어로 밀려 나옵니다.
+   좁은 화면에서는 화면 높이의 70% 정도로 둡니다. */
+.admin-dashboard__stage {
+  position: relative;
+  height: min(70svh, 640px);
+  min-height: 420px;
+  overflow: hidden;
 }
 
 .admin-dashboard__map {
+  position: absolute;
+  inset: 0;
   border-radius: 0;
 }
 
-.admin-dashboard__side {
-  display: grid;
-  align-content: start;
-  gap: 20px;
-}
-
-/* 넓은 화면: 지도와 패널을 나란히 둡니다. 지도를 덮으면 저작권 표기가 가려지므로
-   겹치지 않게 칸을 나눕니다. 본문 여백(위 40 + 아래 72)을 뺀 높이에 맞춰 한 화면에 담습니다. */
+/* 넓은 화면: 본문 여백(위 40 + 아래 72)을 뺀 높이에 맞춰 한 화면에 담습니다. */
 @media (min-width: 1181px) {
   .admin-dashboard {
     display: flex;
@@ -229,36 +257,91 @@ const centerFill = computed(() => {
     height: calc(100svh - 112px);
   }
 
-  .admin-dashboard__columns {
+  .admin-dashboard__stage {
     flex: 1;
+    height: auto;
     min-height: 0;
-    gap: 0;
-    grid-template-columns: minmax(0, 1fr) 380px;
   }
+}
 
-  /* 지도는 왼쪽 칸을 꽉 채웁니다. */
-  .admin-dashboard__map {
-    min-width: 0;
-  }
+/* 드로어: 닫히면 오른쪽 밖으로 빠지고 손잡이만 지도 위에 남습니다. */
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  width: min(380px, calc(100% - 48px));
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
 
-  /* 오른쪽 패널. 세로로 길어지면 패널 안에서만 스크롤됩니다. */
-  .admin-dashboard__side {
-    min-height: 0;
-    gap: 0;
-    overflow-y: auto;
-    background: var(--color-white);
-  }
+.drawer--open {
+  transform: none;
+}
 
-  /* 패널 안에서는 카드 테두리를 걷고 구분선으로만 나눕니다. */
-  .admin-dashboard__side :deep(.app-card) {
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
+.drawer__toggle {
+  position: absolute;
+  top: 16px;
+  right: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--color-card-border);
+  border-right: 0;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--color-white);
+  color: var(--color-brown);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: -2px 2px 8px rgb(32 42 56 / 10%);
+  cursor: pointer;
+}
 
-  .admin-dashboard__side :deep(.app-card + .app-card) {
-    border-top: 1px solid var(--color-divider);
+.drawer__toggle:hover {
+  background: var(--color-cream);
+}
+
+/* 닫힘: ‹ (열기) · 열림: › (닫기) */
+.drawer__chevron {
+  transition: transform 0.25s ease;
+}
+
+.drawer--open .drawer__chevron {
+  transform: rotate(180deg);
+}
+
+/* 패널 본문. 세로로 길어지면 패널 안에서만 스크롤됩니다. */
+.admin-dashboard__side {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-white);
+}
+
+.drawer--open .admin-dashboard__side {
+  box-shadow: var(--shadow-popover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer__chevron {
+    transition: none;
   }
+}
+
+/* 패널 안에서는 카드 테두리를 걷고 구분선으로만 나눕니다. */
+.admin-dashboard__side :deep(.app-card) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.admin-dashboard__side :deep(.app-card + .app-card) {
+  border-top: 1px solid var(--color-divider);
 }
 
 /* 패널 맨 위: 지금 보고 있는 범위(전체 또는 선택한 센터) */

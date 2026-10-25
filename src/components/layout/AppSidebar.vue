@@ -16,6 +16,8 @@ const router = useRouter()
 
 const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
+// 관리자(DIRECTOR)는 본부장, 그 외는 센터장으로 부릅니다.
+const greeting = computed(() => `안녕하세요, ${auth.isAdmin.value ? '본부장님' : '센터장님'}`)
 
 // adminOnly 항목은 DIRECTOR 에게만, 나머지는 DIRECTOR 가 아닌 역할에게만 보입니다.
 // 두 묶음은 겹치지 않습니다. 라우트도 meta.admin·meta.operator 로 함께 막습니다.
@@ -45,7 +47,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/admin/dashboard',
-    label: '실시간 센터 현황(관리자)',
+    label: '실시간 센터 현황',
     icon: 'M10 2.5 16 5v4.8c0 3.4-2.4 6.1-6 7.2-3.6-1.1-6-3.8-6-7.2V5l6-2.5Zm-2.4 7.2 1.8 1.8 3.2-3.3',
     adminOnly: true,
   },
@@ -364,7 +366,7 @@ onBeforeUnmount(() => {
             @click="toggleProfile"
           >
             <span class="sidebar__avatar" />
-            <span class="sidebar__label sidebar__label--name">안녕하세요, 센터장님</span>
+            <span class="sidebar__label sidebar__label--name">{{ greeting }}</span>
           </button>
 
           <div v-if="isProfileOpen" class="sidebar__panel">

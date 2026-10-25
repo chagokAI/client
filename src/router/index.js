@@ -62,7 +62,7 @@ const routes = [
     path: '/admin/dashboard',
     name: 'admin-dashboard',
     component: () => import('@/views/admin/AdminDashboardView.vue'),
-    meta: { title: '실시간 센터 현황 (관리자)', admin: true },
+    meta: { title: '실시간 센터 현황', admin: true },
   },
   {
     path: '/admin/reports',
