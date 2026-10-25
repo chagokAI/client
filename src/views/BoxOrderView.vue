@@ -81,7 +81,6 @@ async function pollJob() {
     drafts.value = []
     activeId.value = ''
     await refresh()
-    toastMessage.value = '새 제안서를 불러왔습니다.'
   } catch (cause) {
     // 확인을 멈추고 버튼을 다시 열어 둡니다. 다시 누르면 서버가 진행 중인 작업을 돌려줍니다.
     job.value = null

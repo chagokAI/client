@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCard from '@/components/common/AppCard.vue'
 import DataTable from '@/components/common/DataTable.vue'
@@ -21,12 +21,10 @@ const props = defineProps({
 
 const emit = defineEmits(['run-job', 'apply'])
 
-// 제안서는 처음에 접어 두고, [제안서 생성하기]를 누른 뒤부터 보여 줍니다.
-const expanded = ref(false)
-const shown = computed(() => expanded.value && Boolean(props.proposal))
+// 재방문·새로고침에서도 서버에 저장된 제안서를 바로 보여 준다.
+const shown = computed(() => Boolean(props.proposal))
 
 function generate() {
-  expanded.value = true
   emit('run-job')
 }
 
@@ -109,18 +107,11 @@ const effectColumns = [
       </ul>
     </template>
 
-    <div v-else-if="!expanded" class="empty-state">
+    <div v-else-if="loaded && !jobRunning" class="empty-state">
       <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서를 만들어 보세요.</p>
       <p class="empty-state__text">
         [제안서 생성하기]를 누르면 최근 관측 이력으로 제안서를 만들어요. 활성 규격과 현재 재고·안전 재고·단가가 등록되어
         있어야 계산할 수 있어요.
-      </p>
-    </div>
-
-    <div v-else-if="loaded" class="empty-state">
-      <p class="empty-state__title">{{ Number(targetMonth.slice(5)) }}월 제안서가 아직 없어요.</p>
-      <p class="empty-state__text">
-        활성 규격과 현재 재고·안전 재고·단가가 등록되어 있어야 계산할 수 있어요. 등록 후 다시 눌러 주세요.
       </p>
     </div>
 
