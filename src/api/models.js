@@ -130,6 +130,7 @@ export function draftModel(o) {
       savedQty: i.qty ?? 0,
       quantity: i.qty ?? 0,
       unitPrice: i.unitPriceKrw ?? 0,
+      custom: i.isCustom === true,
     })),
   }
 }
