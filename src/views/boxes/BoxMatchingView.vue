@@ -124,11 +124,29 @@ function handleDeactivate() {
 function handleDelete() {
   return deactivate(deletingProduct.value)
 }
+
+function recalculate() {
+  return run(async () => {
+    await warehouseApi('/product-matches/recalculate', {
+      method: 'POST',
+      query: { refreshExisting: true },
+      body: {},
+    })
+    await refresh()
+  }, '현재 활성 박스 기준으로 매칭을 갱신했습니다.')
+}
 </script>
 
 <template>
   <div class="box-matching">
-    <PageHeader title="물품-박스 매칭 현황" description="상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다." />
+    <PageHeader
+      title="물품-박스 매칭 현황"
+      description="현재 활성 박스 중 치수에 맞고 포장공간비율이 가장 높은 규격을 추천합니다."
+    >
+      <template #actions>
+        <AppButton :disabled="saving || !auth.canEdit.value" @click="recalculate">매칭 갱신</AppButton>
+      </template>
+    </PageHeader>
 
     <ApiState :error="error" @retry="refresh" />
     <FilterBar>
