@@ -1,4 +1,5 @@
-const baseUrl = (import.meta.env?.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
+// .env 에 VITE_API_BASE_URL= 로 빈 값을 둔 경우도 기본값을 쓴다(?? 는 빈 문자열을 통과시킨다)
+const baseUrl = (import.meta.env?.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 let csrf = null
 let csrfRequest = null
 
