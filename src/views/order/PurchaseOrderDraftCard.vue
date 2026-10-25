@@ -88,6 +88,7 @@ const orderColumns = [
       >
         <template #cell-code="{ row }">
           <strong>{{ row.code }}</strong>
+          <StatusBadge v-if="row.custom" label="맞춤" tone="warning" />
         </template>
 
         <template #cell-quantity="{ row }">
@@ -117,6 +118,10 @@ const orderColumns = [
         <template v-if="editable">
           제안서 수량이 자동으로 입력되었습니다. −/+ 버튼으로 100개 단위로 수정하면 총 수량과 합계가 바로 바뀝니다.
           수량을 0으로 두면 해당 규격은 발주에서 빠집니다.
+          <template v-if="activeDraft.items.some((item) => item.custom)">
+            맞춤 규격은 발주 승인 시 활성화됩니다. 입고 전 재고는 0이며, 수량을 바꿀 때는 공급사 견적 단가도 확인해
+            주세요.
+          </template>
         </template>
         <template v-else-if="activeDraft.status !== 'PENDING'"
           >이미 처리된 발주서예요. 진행 상태는 발주서 이력에서 확인할 수 있어요.</template

@@ -134,6 +134,10 @@ function handleSave(form) {
     )
       throw new Error('규격명·사이즈명, 양수 정수 치수와 0 이상 단가를 입력하세요.')
     const target = formModal.value.spec
+    const safetyQty = form.safetyQty === '' ? null : Number(form.safetyQty)
+    const targetQty = form.targetQty === '' ? null : Number(form.targetQty)
+    if ([safetyQty, targetQty].some((value) => value != null && (!Number.isInteger(value) || value < 0)))
+      throw new Error('안전 재고와 목표 재고는 0 이상의 정수로 입력해 주세요.')
     const body = {
       code: form.code.trim(),
       name: form.sizeName.trim(),
@@ -151,24 +155,27 @@ function handleSave(form) {
     if (target) body.expectedVersion = target.version
     else {
       body.initialOnHandQty = Number(form.initialOnHandQty)
-      body.safetyQty = Number(form.safetyQty)
-      if (form.targetQty !== '') body.targetQty = Number(form.targetQty)
+      if (safetyQty != null) body.safetyQty = safetyQty
+      if (targetQty != null) body.targetQty = targetQty
     }
     const { data: saved } = await warehouseApi(target ? `/box-specs/${target.id}` : '/box-specs', {
       method: target ? 'PATCH' : 'POST',
       body,
     })
-    // 안전 재고는 정책 API가 따로 들고 있어 바뀐 경우에만 이어서 저장합니다.
-    // 규격과 같은 행이라 방금 저장한 응답의 version 을 그대로 expectedVersion 으로 보냅니다.
-    if (target && Number(form.safetyQty) !== target.safetyQty)
-      await warehouseApi(`/box-inventories/${target.id}/policy`, {
-        method: 'PATCH',
-        body: {
-          expectedVersion: saved.version,
-          safetyQty: Number(form.safetyQty),
-          alertEnabled: target.stock?.alertEnabled ?? true,
-        },
-      })
+    // 자동 계산값을 그대로 저장해 고정 수량으로 바꾸지 않는다. 직접 입력한 값이 달라진 경우만 저장한다.
+    if (target) {
+      const policy = { expectedVersion: saved.version }
+      if (safetyQty !== (target.configuredSafetyQty ?? null)) {
+        if (safetyQty == null) policy.safetyDays = target.stock?.safetyDays ?? 7
+        else policy.safetyQty = safetyQty
+      }
+      if (targetQty !== (target.configuredTargetQty ?? null)) {
+        if (targetQty == null) policy.automaticTarget = true
+        else policy.targetQty = targetQty
+      }
+      if (Object.keys(policy).length > 1)
+        await warehouseApi(`/box-inventories/${target.id}/policy`, { method: 'PATCH', body: policy })
+    }
     formModal.value = null
     await refresh()
   }, '박스 규격이 저장되었습니다.')
@@ -249,15 +256,29 @@ function handleStockInSubmit(form) {
       </template>
 
       <template #cell-safety="{ row }">
-        <span :class="{ 'cell--empty': row.safetyQty == null }">{{ row.safety }}</span>
+        <span
+          :class="{ 'cell--empty': row.safetyQty == null }"
+          :title="
+            row.safetyQty == null
+              ? '예상 사용량 근거가 없어 계산할 수 없습니다.'
+              : row.configuredSafetyQty == null
+                ? `${row.stock.safetyDays}일분 자동 계산`
+                : '직접 설정한 수량'
+          "
+          >{{ row.safetyQty == null ? '계산 불가' : row.safety }}</span
+        >
       </template>
 
       <template #cell-level="{ row }">
-        <div v-if="row.level != null" class="level">
+        <div
+          v-if="row.level != null"
+          class="level"
+          :title="`현재 ${number(row.onHandQty)}개 / 목표 ${number(row.stock.targetQty)}개`"
+        >
           <ProgressBar :value="row.level" :tone="TONE_BY_STOCK[row.stockStatus]" :label="`${row.code} 재고 수준`" />
           <span class="level__value">{{ row.level }}%</span>
         </div>
-        <span v-else class="cell--empty">—</span>
+        <span v-else class="cell--empty">{{ row.stock.targetQty === 0 ? '사용 계획 없음' : '계산 불가' }}</span>
       </template>
 
       <template #cell-linkedProducts="{ row }">

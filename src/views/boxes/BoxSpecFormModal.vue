@@ -37,8 +37,8 @@ const form = reactive({
   unitPriceKrw: props.spec?.unitPriceKrw ?? 0,
   initialOnHandQty: 0,
   // 수정할 때는 목록이 함께 받아 온 현재 안전 재고를 그대로 보여 줍니다.
-  safetyQty: props.spec?.safetyQty ?? 0,
-  targetQty: '',
+  safetyQty: props.spec?.configuredSafetyQty ?? '',
+  targetQty: props.spec?.configuredTargetQty ?? '',
   kind: props.spec?.custom ? 'custom' : 'standard',
   inUse: props.spec ? props.spec.isActive : true,
   description: props.spec?.description ?? '',
@@ -165,12 +165,26 @@ function handleSave() {
             type="number"
             min="0"
             step="1"
+            placeholder="비우면 기본 7일분 자동 계산"
           />
         </div>
         <div class="field">
           <span class="field__label">현재 재고</span>
           <p class="field__readonly">{{ spec.current }}</p>
         </div>
+      </div>
+
+      <div v-if="isEditing" class="field">
+        <label class="field__label" for="spec-target-edit">목표 재고 (개, 선택)</label>
+        <input
+          id="spec-target-edit"
+          v-model.number="form.targetQty"
+          class="field__input"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="비우면 납품일까지 소모 + 안전 재고"
+        />
       </div>
       <div v-if="!isEditing" class="spec-form__row">
         <div class="field">
@@ -185,7 +199,7 @@ function handleSave() {
           />
         </div>
         <div class="field">
-          <label class="field__label" for="spec-safety">안전 재고 (개)</label
+          <label class="field__label" for="spec-safety">안전 재고 (개, 선택)</label
           ><input
             id="spec-safety"
             v-model.number="form.safetyQty"
@@ -193,6 +207,7 @@ function handleSave() {
             type="number"
             min="0"
             step="1"
+            placeholder="비우면 기본 7일분 자동 계산"
           />
         </div>
         <div class="field">
@@ -204,9 +219,15 @@ function handleSave() {
             type="number"
             min="0"
             step="1"
+            placeholder="비우면 납품일까지 소모 + 안전 재고"
           />
         </div>
       </div>
+
+      <p class="spec-form__notice">
+        안전 재고는 기본 7일분입니다. 목표 재고는 다음 납품일까지의 예상 소모에 안전 재고를 더합니다. 확정 납품일이
+        없으면 5일을 기준으로 계산합니다. 수량을 직접 입력하면 해당 값을 우선합니다.
+      </p>
 
       <div class="field">
         <label class="field__label" for="spec-description">간단 설명</label>
