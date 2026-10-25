@@ -4,6 +4,8 @@ import FilterChips from '../common/FilterChips.vue'
 
 const props = defineProps({
   unreadCount: { type: Number, default: 0 },
+  saving: Boolean,
+  error: { type: String, default: '' },
   // { id, category, title, detail, time, unread } 형태의 배열
   notifications: {
     type: Array,
@@ -11,7 +13,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['read-all', 'view-all'])
+const emit = defineEmits(['read-all', 'view-all', 'select', 'retry'])
 
 const activeFilter = ref('all')
 
@@ -39,7 +41,12 @@ const visibleNotifications = computed(() => {
         알림
         <span v-if="unreadCount" class="notification-panel__count">{{ unreadCount }}</span>
       </h2>
-      <button class="notification-panel__read-all" type="button" disabled title="읽음 처리는 준비 중이에요">
+      <button
+        class="notification-panel__read-all"
+        type="button"
+        :disabled="saving || !unreadCount"
+        @click="emit('read-all')"
+      >
         모두 읽음
       </button>
     </header>
@@ -49,26 +56,30 @@ const visibleNotifications = computed(() => {
     </div>
 
     <ul class="notification-panel__list">
-      <li v-if="!visibleNotifications.length" class="notification-panel__empty">해당하는 알림이 없습니다.</li>
+      <li v-if="error" class="notification-panel__empty" role="alert">
+        {{ error }} <button type="button" @click="emit('retry')">다시 시도</button>
+      </li>
+      <li v-else-if="!visibleNotifications.length" class="notification-panel__empty">해당하는 알림이 없습니다.</li>
 
       <li
         v-for="notification in visibleNotifications"
-        v-else
         :key="notification.id"
         class="notification-panel__item"
         :class="{ 'notification-panel__item--unread': notification.unread }"
       >
-        <span class="notification-panel__category" :class="`notification-panel__category--${notification.tone}`">
-          {{ notification.category }}
-        </span>
+        <button class="notification-panel__open" type="button" @click="emit('select', notification)">
+          <span class="notification-panel__category" :class="`notification-panel__category--${notification.tone}`">
+            {{ notification.category }}
+          </span>
 
-        <div class="notification-panel__content">
-          <p class="notification-panel__item-title">{{ notification.title }}</p>
-          <p class="notification-panel__detail">{{ notification.detail }}</p>
-          <p class="notification-panel__time">{{ notification.time }}</p>
-        </div>
+          <div class="notification-panel__content">
+            <p class="notification-panel__item-title">{{ notification.title }}</p>
+            <p class="notification-panel__detail">{{ notification.detail }}</p>
+            <p class="notification-panel__time">{{ notification.time }}</p>
+          </div>
 
-        <span v-if="notification.unread" class="notification-panel__dot" aria-label="읽지 않음" />
+          <span v-if="notification.unread" class="notification-panel__dot" aria-label="읽지 않음" />
+        </button>
       </li>
     </ul>
 
@@ -148,11 +159,29 @@ const visibleNotifications = computed(() => {
 }
 
 .notification-panel__item {
+  border-top: 1px solid var(--color-divider);
+}
+
+.notification-panel__open {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   padding: 14px 18px;
-  border-top: 1px solid var(--color-divider);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-panel__open:hover {
+  background: var(--color-cream);
+}
+
+.notification-panel__read-all:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .notification-panel__item--unread {

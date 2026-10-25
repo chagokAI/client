@@ -5,7 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
-RUN npm run build
+# Public browser key: Vite substitutes this value into the generated map bundle.
+ARG VITE_CARTO_KEY
+RUN VITE_CARTO_KEY="$VITE_CARTO_KEY" npm run build
 
 FROM nginx:stable-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf

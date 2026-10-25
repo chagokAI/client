@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import NotificationPanel from './NotificationPanel.vue'
 import ProfileMenu from './ProfileMenu.vue'
 import AppToast from '@/components/common/AppToast.vue'
-import { auth, warehouseApi } from '@/stores/auth'
-import { notificationRow } from '@/api/rows'
+import { auth } from '@/stores/auth'
+import { notifications as notificationStore, notificationTarget } from '@/stores/notifications'
 import { useNotificationSetting } from '@/composables/useNotificationSetting'
 import { useSidebar } from '@/composables/useSidebar'
 import { useToast } from '@/composables/useToast'
@@ -95,8 +95,7 @@ watch(
   { immediate: true },
 )
 
-const notifications = ref([])
-const unreadCount = ref(0)
+const { items: notifications, unreadCount, saving: notificationsSaving, error: notificationsError } = notificationStore
 // 알림을 끄면 벨의 안 읽은 건수 배지를 숨깁니다. 벨을 눌러 목록을 보는 것은 그대로 됩니다.
 const { isEnabled: notificationsEnabled } = useNotificationSetting()
 const visibleUnreadCount = computed(() => (notificationsEnabled.value ? unreadCount.value : 0))
@@ -106,21 +105,24 @@ const isProfileOpen = ref(false)
 const bellArea = useTemplateRef('bellArea')
 const profileArea = useTemplateRef('profileArea')
 
-function loadNotifications() {
-  return report(async () => {
-    const { data } = await warehouseApi('/notifications', { query: { size: 20 } })
-    notifications.value = data.items.map(notificationRow)
-    unreadCount.value = data.unreadCount
-  })
+function markAllAsRead() {
+  return report(() => notificationStore.markAllRead())
 }
 
-function markAllAsRead() {
-  toastMessage.value = '알림 읽음 처리는 아직 사용할 수 없어요.'
+function openNotification(item) {
+  return report(async () => {
+    await notificationStore.markRead(item)
+    const target = notificationTarget(item.link)
+    if (target) {
+      isPanelOpen.value = false
+      router.push(target)
+    }
+  })
 }
 
 function handleViewAll() {
   isPanelOpen.value = false
-  // TODO: 알림 전체 목록 페이지가 생기면 해당 경로로 이동시킵니다.
+  router.push('/notifications')
 }
 
 // 패널 바깥을 누르거나 Esc를 누르면 닫습니다.
@@ -138,7 +140,7 @@ function handleKeydown(event) {
 
 // 벨과 프로필 메뉴는 동시에 열리지 않습니다.
 function toggleNotifications() {
-  if (!isPanelOpen.value) loadNotifications()
+  if (!isPanelOpen.value) notificationStore.refresh()
   isProfileOpen.value = false
   isPanelOpen.value = !isPanelOpen.value
 }
@@ -168,13 +170,31 @@ async function handleLogout() {
 // 모바일에서는 메뉴를 고르면 드로어를 닫습니다.
 watch(() => route.fullPath, closeMobile)
 
+watch(
+  () => [auth.session.value?.id, auth.warehouseId.value],
+  () => notificationStore.start(auth.warehouseId.value),
+  { immediate: true },
+)
+
+watch(notificationStore.incoming, (item) => {
+  if (item && notificationsEnabled.value) toastMessage.value = `${item.title} · ${item.message}`
+})
+
+function refreshNotifications() {
+  if (document.visibilityState !== 'hidden') notificationStore.refresh()
+}
+
 onMounted(() => {
-  loadNotifications()
+  window.addEventListener('online', refreshNotifications)
+  document.addEventListener('visibilitychange', refreshNotifications)
   document.addEventListener('click', handleDocumentClick)
   document.addEventListener('keydown', handleKeydown)
 })
 
 onBeforeUnmount(() => {
+  notificationStore.stop()
+  window.removeEventListener('online', refreshNotifications)
+  document.removeEventListener('visibilitychange', refreshNotifications)
   document.removeEventListener('click', handleDocumentClick)
   document.removeEventListener('keydown', handleKeydown)
 })
@@ -324,6 +344,10 @@ onBeforeUnmount(() => {
             <NotificationPanel
               :notifications="notifications"
               :unread-count="unreadCount"
+              :saving="notificationsSaving"
+              :error="notificationsError"
+              @select="openNotification"
+              @retry="notificationStore.refresh"
               @read-all="markAllAsRead"
               @view-all="handleViewAll"
             />
@@ -350,7 +374,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <AppToast v-if="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
+    <AppToast v-if="toastMessage" :key="toastMessage" :message="toastMessage" @close="toastMessage = ''" />
   </div>
 </template>
 

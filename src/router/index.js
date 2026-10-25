@@ -18,6 +18,13 @@ const routes = [
     meta: { title: '실시간 센터 현황', operator: true },
   },
   { path: '/boxes', redirect: '/boxes/specs' },
+  { path: '/boxes/inventory', redirect: '/boxes/specs' },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/views/NotificationsView.vue'),
+    meta: { title: '전체 알림' },
+  },
   {
     path: '/boxes/matching',
     name: 'box-matching',

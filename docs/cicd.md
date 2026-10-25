@@ -77,7 +77,11 @@ scp deploy/client-deploy.conf.example \
 이미지를 먼저 pull한 뒤 현재 이미지에 로컬 롤백 태그를 붙이므로, 새 버전이 실패해도 이전 이미지를 다시 다운로드할 필요가 없다.
 
 프런트는 같은 출처의 `/api/v1`을 유지한다. `VITE_*` 값은 브라우저에 공개되는 빌드 설정이므로 서버 비밀값을 넣지 않는다.
-현재 Dockerfile은 별도 `VITE_*` 빌드 인자를 받지 않으며 서버의 컨테이너 환경변수만 바꿔도 정적 번들은 바뀌지 않는다.
+센터 지도의 CARTO 키는 client 저장소의 **Settings → Secrets and variables → Actions → Variables → Repository variables**에
+`VITE_CARTO_KEY`라는 이름으로 등록한다. 이미지 발행 작업은 `production` Environment를 사용하지 않으므로 이 키는 Repository variable로 둔다.
+Client Deploy는 이 값을 Docker 빌드 인자로 전달하고 Vite가 지도 번들에 포함한다. 키를 추가·변경한 뒤 Client Deploy를 `main`으로 다시 실행해야 반영된다.
+서버의 컨테이너 환경변수만 바꾸면 정적 번들은 바뀌지 않는다. 로컬 Vite 개발은 `.env.local`에 같은 이름으로 설정한다.
+직접 Docker 이미지를 만들 때는 `docker build --build-arg VITE_CARTO_KEY=... .`로 전달한다.
 
 ## 최초 배포와 확인
 
