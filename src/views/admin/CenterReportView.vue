@@ -5,10 +5,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 
 <template>
   <div class="center-report">
-    <PageHeader
-      title="센터별 리포트/지침서"
-      description="센터별 운영 리포트와 박스 운용 지침서를 확인하고 내려받습니다."
-    />
+    <PageHeader title="센터별 리포트/지침서" />
 
     <div class="center-report__columns">
       <AppCard title="센터별 리포트">
