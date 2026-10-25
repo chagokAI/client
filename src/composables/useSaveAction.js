@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useToast } from './useToast'
 
 /**
  * 저장·삭제처럼 "한 번에 하나만, 끝나면 안내 문구" 패턴을 한곳에 모은다.
@@ -6,10 +7,12 @@ import { ref } from 'vue'
  *
  * const { saving, toastMessage, run } = useSaveAction()
  * run(async () => { await warehouseApi(...) }, '저장되었습니다.')
+ *
+ * 같은 토스트를 쓰는 곁다리 조회는 잠금이 없는 report 를 쓴다. (useToast)
  */
 export function useSaveAction() {
+  const { toastMessage, report } = useToast()
   const saving = ref(false)
-  const toastMessage = ref('')
 
   async function run(action, successMessage) {
     if (saving.value) return false
@@ -26,5 +29,5 @@ export function useSaveAction() {
     }
   }
 
-  return { saving, toastMessage, run }
+  return { saving, toastMessage, run, report }
 }

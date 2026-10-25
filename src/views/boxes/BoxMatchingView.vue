@@ -17,6 +17,7 @@ import ProductEditModal from './ProductEditModal.vue'
 import { auth, warehouseApi } from '@/stores/auth'
 import { MATCH, fillTone } from '@/api/format'
 import { productRow } from '@/api/rows'
+import { isPositiveInt, toDimensions } from '@/api/validate'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSaveAction } from '@/composables/useSaveAction'
 
@@ -30,7 +31,7 @@ const products = ref([]),
   categories = ref([])
 const editingProduct = ref(null),
   deletingProduct = ref(null)
-const { saving, toastMessage, run } = useSaveAction()
+const { saving, toastMessage, run, report } = useSaveAction()
 const productSearchFields = [
   { value: 'name', label: '상품명' },
   { value: 'code', label: '상품코드' },
@@ -45,7 +46,6 @@ const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
   ...Object.entries(MATCH).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
 ])
-const rows = computed(() => products.value)
 const columns = [
   { key: 'name', label: '상품명 / 상품코드', width: '22%', align: 'left' },
   { key: 'category', label: '카테고리', width: '10%', align: 'left' },
@@ -76,26 +76,22 @@ const { loading, error, page, totalPages, refresh } = useListQuery(
     return data.totalPages
   },
 )
-onMounted(async () => {
-  try {
+onMounted(() =>
+  report(async () => {
     const { data } = await warehouseApi('/categories')
     categories.value = data.map((c) => ({ value: c.id, label: c.name }))
-  } catch (cause) {
-    toastMessage.value = cause.message
-  }
-})
-async function openEdit(row) {
-  try {
+  }),
+)
+function openEdit(row) {
+  return report(async () => {
     const { data } = await warehouseApi(`/products/${row.id}`)
     editingProduct.value = productRow(data)
-  } catch (cause) {
-    toastMessage.value = cause.message
-  }
+  })
 }
 function handleSave(form) {
   return run(async () => {
-    const dimensions = [form.width, form.depth, form.height].map(Number)
-    if (!form.name.trim() || dimensions.some((v) => !Number.isInteger(v) || v <= 0))
+    const dimensions = toDimensions(form)
+    if (!form.name.trim() || !dimensions.every(isPositiveInt))
       throw new Error('상품명과 양수 정수 치수를 입력해 주세요.')
     await warehouseApi(`/products/${editingProduct.value.id}`, {
       method: 'PATCH',
@@ -162,7 +158,7 @@ function handleDelete() {
 
     <DataTable
       :columns="columns"
-      :rows="rows"
+      :rows="products"
       row-key="id"
       :loading="loading"
       empty-text="조건에 맞는 상품이 없습니다."

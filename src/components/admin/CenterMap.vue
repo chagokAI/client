@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// 센터 위치를 OSM 지도 위에 핀으로 찍습니다. 핀에 마우스를 올리면 센터 이름이 보입니다.
+// 센터 위치를 CARTO 베이스맵 위에 핀으로 찍습니다. 핀에 마우스를 올리면 센터 이름이 보입니다.
 const props = defineProps({
   // { warehouseId, name, latitude, longitude } 목록
   centers: { type: Array, default: () => [] },
