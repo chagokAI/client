@@ -21,7 +21,7 @@ async function handleLogin(input) {
       route.query.redirect.startsWith('/') &&
       !route.query.redirect.startsWith('//')
         ? route.query.redirect
-        : '/dashboard'
+        : auth.homePath.value
     await router.replace(redirect)
   } catch (error) {
     message.value = error.message

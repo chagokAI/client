@@ -11,7 +11,7 @@ const currentUser = computed(() => ({
   ...auth.session.value,
   initial: auth.session.value?.name?.slice(0, 1) ?? '',
   team: auth.session.value?.department ?? '',
-  role: { VIEWER: '조회자', OPERATOR: '운영자', DIRECTOR: '관리자' }[auth.session.value?.role] ?? '',
+  role: { OPERATOR: '운영자', DIRECTOR: '관리자' }[auth.session.value?.role] ?? '',
 }))
 // 컨트롤 타워는 서버 센터 목록에 없는 화면 전용 선택지입니다.
 const centerOptions = computed(() => [

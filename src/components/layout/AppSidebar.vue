@@ -16,7 +16,8 @@ const router = useRouter()
 const currentUser = computed(() => auth.session.value ?? {})
 const centerId = computed(() => auth.warehouseId.value ?? '')
 
-// adminOnly 항목은 관리자에게만 보입니다. 라우트도 meta.admin 으로 함께 막습니다.
+// adminOnly 항목은 DIRECTOR 에게만, 나머지는 DIRECTOR 가 아닌 역할에게만 보입니다.
+// 두 묶음은 겹치지 않습니다. 라우트도 meta.admin·meta.operator 로 함께 막습니다.
 const NAV_ITEMS = [
   {
     to: '/dashboard',
@@ -55,7 +56,8 @@ const NAV_ITEMS = [
   },
 ]
 
-const navItems = computed(() => NAV_ITEMS.filter((item) => !item.adminOnly || auth.isAdmin.value))
+const navItems = computed(() => NAV_ITEMS.filter((item) => !!item.adminOnly === auth.isAdmin.value))
+const homePath = auth.homePath
 
 // 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
 const openGroups = ref(NAV_ITEMS.filter((item) => item.children).map((item) => item.label))
@@ -198,7 +200,7 @@ onBeforeUnmount(() => {
 
     <aside class="sidebar" :class="{ 'sidebar--collapsed': isCollapsed }">
       <div class="sidebar__head">
-        <RouterLink class="sidebar__logo" to="/dashboard" aria-label="차곡 대시보드로 이동">
+        <RouterLink class="sidebar__logo" :to="homePath" aria-label="차곡 대시보드로 이동">
           <svg class="sidebar__logo-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
             <path fill="#ffb64d" d="M24 2 45 14 24 26 3 14Z" />
             <path fill="#b87b3e" d="M3 17 22 28v20L3 37Z" />

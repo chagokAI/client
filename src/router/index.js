@@ -15,14 +15,18 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('@/views/DashboardView.vue'),
-    meta: { title: '실시간 센터 현황' },
+    meta: { title: '실시간 센터 현황', operator: true },
   },
   { path: '/boxes', redirect: '/boxes/specs' },
   {
     path: '/boxes/matching',
     name: 'box-matching',
     component: () => import('@/views/boxes/BoxMatchingView.vue'),
-    meta: { title: '물품-박스 매칭 현황', description: '상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다.' },
+    meta: {
+      title: '물품-박스 매칭 현황',
+      description: '상품 규격을 분석하고 가장 알맞은 택배 상자를 매칭합니다.',
+      operator: true,
+    },
   },
   {
     path: '/boxes/specs',
@@ -31,21 +35,22 @@ const routes = [
     meta: {
       title: '박스 재고/규격 관리',
       description: '택배 상자 규격 정보와 규격별 재고를 함께 확인하고 관리합니다.',
+      operator: true,
     },
   },
   {
     path: '/orders',
     name: 'box-order',
     component: () => import('@/views/BoxOrderView.vue'),
-    meta: { title: '박스 주문' },
+    meta: { title: '박스 주문', operator: true },
   },
   {
     path: '/purchase-orders',
     name: 'purchase-orders',
     component: () => import('@/views/PurchaseOrderHistoryView.vue'),
-    meta: { title: '발주서 이력 관리' },
+    meta: { title: '발주서 이력 관리', operator: true },
   },
-  // 관리자 전용. meta.admin 이 붙은 경로는 아래 beforeEach 에서 막습니다.
+  // 관리자(DIRECTOR) 전용. meta.admin 이 붙은 경로는 아래 beforeEach 에서 막습니다.
   {
     path: '/admin/dashboard',
     name: 'admin-dashboard',
@@ -77,9 +82,11 @@ router.beforeEach(async (to) => {
   try {
     const session = await auth.restore()
     if (!session && to.name !== 'login') return { name: 'login', query: { redirect: to.fullPath } }
-    if (session && to.name === 'login') return { name: 'dashboard' }
-    // 관리자 전용 화면은 주소로 바로 들어와도 막습니다. (판정 기준은 메뉴와 같은 auth.isAdmin)
-    if (to.meta.admin && !auth.isAdmin.value) return { name: 'dashboard' }
+    if (session && to.name === 'login') return auth.homePath.value
+    // 역할 전용 화면은 주소로 바로 들어와도 막고, 그 역할의 첫 화면으로 돌려보냅니다.
+    // (판정 기준은 메뉴와 같은 auth.isAdmin)
+    if (to.meta.admin && !auth.isAdmin.value) return auth.homePath.value
+    if (to.meta.operator && auth.isAdmin.value) return auth.homePath.value
   } catch {
     if (to.name !== 'login') return { name: 'login', query: { connection: 'unavailable' } }
   }
