@@ -8,19 +8,41 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import CenterMap from '@/components/admin/CenterMap.vue'
 import FillRateChart from '@/components/admin/FillRateChart.vue'
 import { useRemote } from '@/composables/useRemote'
-import { centerReports, FILL_TARGET, REPORT_MONTHS, reportSummary, reruns, STATUS } from './hqReportSample'
+import { buildHqDashboard, STATUS } from './hqReportData'
 
 // 센터 위치: 좌표가 등록된 센터만 지도에 핀으로 찍습니다.
 const { loading, error, load } = useRemote()
 const centers = ref([])
+const { loading: reportsLoading, error: reportsError, load: loadReports } = useRemote()
+const reportData = ref(buildHqDashboard([]))
+const centerReports = computed(() => reportData.value.centerReports)
+const reportSummary = computed(() => reportData.value.summary)
+const reruns = computed(() => reportData.value.reruns)
+const reportMonths = computed(() => reportData.value.months)
 
 function refresh() {
-  return load(
-    (signal) => api('/admin/warehouses', { signal }),
-    (response) => {
-      centers.value = response.data
-    },
-  )
+  return Promise.all([
+    load(
+      (signal) => api('/admin/warehouses', { signal }),
+      (response) => {
+        centers.value = response.data
+      },
+    ),
+    loadReports(
+      async (signal) => {
+        const { data } = await api('/admin/hq-reports', { signal })
+        return Promise.all(
+          (data.items ?? []).map(async ({ month }) => {
+            const response = await api(`/admin/hq-reports/${month}`, { signal })
+            return response.data
+          }),
+        )
+      },
+      (reports) => {
+        reportData.value = buildHqDashboard(reports)
+      },
+    ),
+  ])
 }
 onMounted(refresh)
 
@@ -28,12 +50,12 @@ onMounted(refresh)
 const selectedId = ref(null)
 const selectedCenter = computed(() => centers.value.find((c) => c.warehouseId === selectedId.value) ?? null)
 
-// TODO: 예시 리포트는 센터 이름으로만 묶여 있어 이름으로 찾습니다. API로 바꾸면 warehouseId 로 찾습니다.
-const selectedReport = computed(() => centerReports.find((r) => r.name === selectedCenter.value?.name) ?? null)
-const selectedReruns = computed(() => reruns.filter((r) => r.center === selectedCenter.value?.name))
+// 센터 ID로 저장된 월별 성과와 지도를 연결한다.
+const selectedReport = computed(() => centerReports.value.find((r) => r.warehouseId === selectedId.value) ?? null)
+const selectedReruns = computed(() => reruns.value.filter((r) => r.warehouseId === selectedId.value))
 
-function selectByName(name) {
-  const center = centers.value.find((c) => c.name === name)
+function selectCenter(warehouseId) {
+  const center = centers.value.find((c) => c.warehouseId === warehouseId)
   if (center) selectedId.value = center.warehouseId
 }
 
@@ -47,26 +69,25 @@ function onSelect(id) {
   if (id) drawerOpen.value = true
 }
 
-const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`
-const signedWon = (n) => `${n >= 0 ? '+' : '−'}${won(Math.abs(n))}`
+const won = (n) => (n == null ? '—' : `${Math.round(n).toLocaleString('ko-KR')}원`)
+const signedWon = (n) => (n == null ? '—' : `${n >= 0 ? '+' : '−'}${won(Math.abs(n))}`)
 const kg = (n) => `${Math.round(n).toLocaleString('ko-KR')} kg`
-const pointDelta = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}%p`
+const pointDelta = (n) => (n == null ? '—' : `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}%p`)
+const pct = (n) => (n == null ? '—' : n.toFixed(1))
 
 // 선택한 센터의 이번 달 충진율과 전월 대비 변화
-const centerFill = computed(() => {
-  const fills = selectedReport.value?.fills ?? []
-  return { now: fills.at(-1), delta: fills.at(-1) - fills.at(-2) }
-})
+const centerFill = computed(() => ({ now: selectedReport.value?.fill, delta: selectedReport.value?.fillDelta }))
 </script>
 
 <template>
   <div class="admin-dashboard">
     <PageHeader
-      title="실시간 센터 현황"
-      description="전체 센터의 운영 성과와 조치가 필요한 항목을 한곳에서 확인합니다."
+      title="센터 운영 현황"
+      description="최근 본부 리포트 기준으로 전체 센터의 운영 성과와 조치가 필요한 항목을 확인합니다."
     />
 
     <ApiState :loading="loading" :error="error" @retry="refresh" />
+    <ApiState :loading="reportsLoading" :error="reportsError" @retry="refresh" />
 
     <div class="admin-dashboard__stage">
       <!-- 지도는 카드 장식 없이 영역을 꽉 채웁니다. -->
@@ -97,7 +118,7 @@ const centerFill = computed(() => {
           <div class="scope">
             <div class="scope__text">
               <p class="scope__eyebrow">
-                {{ selectedCenter ? '선택한 센터' : '본부 전체 요약' }} · {{ reportSummary.month }} 리포트
+                {{ selectedCenter ? '선택한 센터' : '본부 전체 요약' }} · {{ reportSummary.month ?? '미생성' }} 리포트
               </p>
               <p class="scope__name">{{ selectedCenter?.name ?? '전체 센터' }}</p>
             </div>
@@ -107,21 +128,23 @@ const centerFill = computed(() => {
           </div>
 
           <!-- 본부 전체 요약 -->
-          <template v-if="!selectedCenter">
+          <template v-if="!selectedCenter && reportSummary.month">
             <AppCard title="절감 효과" meta="박스비 + 운임">
               <div class="figure">
                 <p class="figure__label">이번 달 · 전월 대비</p>
                 <p class="figure__value">{{ signedWon(reportSummary.monthSaving) }}</p>
-                <p class="figure__sub">연 {{ reportSummary.annualSavingLabel }} 추정</p>
+                <p class="figure__sub">현재 월 효과 기준 연 {{ won(reportSummary.annualSaving) }} 추정</p>
               </div>
               <dl class="stats">
                 <div>
-                  <dt>누적 절감 <small>11~1월</small></dt>
+                  <dt>
+                    누적 절감 <small>{{ reportSummary.period }}</small>
+                  </dt>
                   <dd>{{ won(reportSummary.cumulativeSaving) }}</dd>
                 </div>
                 <div>
-                  <dt>1년 예상</dt>
-                  <dd>{{ reportSummary.yearSavingLabel }}</dd>
+                  <dt>월 절감액 · 30일 환산</dt>
+                  <dd>{{ won(reportSummary.monthlySaving) }}</dd>
                 </div>
                 <div>
                   <dt>누적 탄소 감축</dt>
@@ -129,14 +152,20 @@ const centerFill = computed(() => {
                 </div>
                 <div>
                   <dt>평균 충진율</dt>
-                  <dd>{{ reportSummary.fillRate.from }} → {{ reportSummary.fillRate.to }}%</dd>
+                  <dd>{{ pct(reportSummary.fillRate.from) }} → {{ pct(reportSummary.fillRate.to) }}%</dd>
                 </div>
               </dl>
             </AppCard>
 
-            <AppCard title="센터 판정" :meta="`목표 충진율 ${FILL_TARGET}%`">
+            <AppCard title="센터 판정" meta="저장된 리포트 판정">
               <ul class="counts">
-                <li v-for="(meta, key) in STATUS" :key="key" class="counts__item" :class="`counts__item--${key}`">
+                <li
+                  v-for="(meta, key) in STATUS"
+                  v-show="key !== 'unknown' || reportSummary.counts.unknown"
+                  :key="key"
+                  class="counts__item"
+                  :class="`counts__item--${key}`"
+                >
                   <span>{{ meta.label }}</span>
                   <strong>{{ reportSummary.counts[key] }}<small>곳</small></strong>
                 </li>
@@ -144,13 +173,12 @@ const centerFill = computed(() => {
 
               <h3 class="subhead">이번 달 재실행</h3>
               <ul v-if="reruns.length" class="rerun">
-                <li v-for="item in reruns" :key="item.center">
-                  <button type="button" class="rerun__item" @click="selectByName(item.center)">
+                <li v-for="item in reruns" :key="item.warehouseId">
+                  <button type="button" class="rerun__item" @click="selectCenter(item.warehouseId)">
                     <span class="rerun__text">
                       <span class="rerun__title">{{ item.center }}</span>
                       <span class="rerun__detail">
-                        충진율 {{ item.before.toFixed(1) }} → {{ item.after.toFixed(1) }}% · 신규 규격
-                        {{ item.added }}종
+                        충진율 {{ pct(item.before) }} → {{ pct(item.after) }}% · 신규 규격 {{ item.added }}종
                       </span>
                     </span>
                     <StatusBadge :label="STATUS[item.status].label" :tone="STATUS[item.status].tone" />
@@ -170,18 +198,26 @@ const centerFill = computed(() => {
               <div class="figure">
                 <p class="figure__label">{{ STATUS[selectedReport.status].reason }}</p>
                 <p class="figure__value">
-                  {{ centerFill.now.toFixed(1) }}%
-                  <span class="delta" :class="{ 'delta--flat': centerFill.delta === 0 }">
+                  {{ pct(centerFill.now) }}%
+                  <span
+                    class="delta"
+                    :class="{
+                      'delta--flat': centerFill.delta == null || centerFill.delta === 0,
+                      'delta--down': centerFill.delta < 0,
+                    }"
+                  >
                     {{ pointDelta(centerFill.delta) }}
                   </span>
                 </p>
-                <p class="figure__sub">전월 대비 · 목표 {{ FILL_TARGET }}%</p>
+                <p class="figure__sub">
+                  전월 대비<span v-if="selectedReport.target != null"> · 목표 {{ selectedReport.target }}%</span>
+                </p>
               </div>
               <FillRateChart
                 :base="selectedReport.base"
                 :fills="selectedReport.fills"
-                :months="REPORT_MONTHS"
-                :target="FILL_TARGET"
+                :months="reportMonths"
+                :target="selectedReport.target"
               />
             </AppCard>
 
@@ -192,7 +228,9 @@ const centerFill = computed(() => {
               </div>
               <dl class="stats">
                 <div>
-                  <dt>누적 절감 <small>11~1월</small></dt>
+                  <dt>
+                    누적 절감 <small>{{ reportSummary.period }}</small>
+                  </dt>
                   <dd>{{ won(selectedReport.cumulativeSaving) }}</dd>
                 </div>
                 <div>
@@ -214,19 +252,31 @@ const centerFill = computed(() => {
             </AppCard>
 
             <AppCard v-if="selectedReruns.length" title="이번 달 재실행">
-              <p v-for="item in selectedReruns" :key="item.center" class="rerun__note">
-                1차 제안 후 충진율이 {{ item.before.toFixed(1) }}%에 머물러 충진율 목표 모드로 다시 제안했습니다. 신규
-                규격 {{ item.added }}종을 반영해 <b>{{ item.after.toFixed(1) }}%</b>가 되었고, 월 비용은
-                {{ won(item.saving) }} 줄었습니다.
+              <p v-for="item in selectedReruns" :key="item.warehouseId" class="rerun__note">
+                저장된 재실행 결과: 충진율 {{ pct(item.before) }}%에서 신규 규격 {{ item.added }}종을 반영해
+                <b>{{ pct(item.after) }}%</b>가 되었고, 월 비용은 {{ signedWon(item.saving) }}의 절감 변화가
+                기록됐습니다.
               </p>
             </AppCard>
           </template>
 
           <div v-else class="side-empty">
-            <p class="empty">{{ reportSummary.month }} 리포트에 이 센터 데이터가 없습니다.</p>
+            <p class="empty">
+              {{
+                reportsError
+                  ? '리포트를 불러오지 못했습니다.'
+                  : reportsLoading
+                    ? '리포트를 불러오고 있습니다.'
+                    : reportSummary.month
+                      ? '이 센터의 리포트 데이터가 없습니다.'
+                      : '저장된 본부 리포트가 없습니다.'
+              }}
+            </p>
           </div>
 
-          <p class="sample-note">예시 데이터 · 본부 효율화 리포트 {{ reportSummary.month }} 기준</p>
+          <p v-if="reportSummary.month" class="report-note">
+            본부 효율화 리포트 {{ reportSummary.month }} 기준 · 월 효과는 30일 환산, 누적은 실제 기간 합계
+          </p>
         </div>
       </div>
     </div>
@@ -431,6 +481,10 @@ const centerFill = computed(() => {
   color: var(--color-text-muted);
 }
 
+.delta--down {
+  color: var(--color-danger-text);
+}
+
 /* 2열 보조 지표 */
 .stats {
   display: grid;
@@ -583,7 +637,7 @@ const centerFill = computed(() => {
   font-size: 12px;
 }
 
-.sample-note {
+.report-note {
   margin: 0;
   padding: 12px 24px 20px;
   color: var(--color-text-muted);
