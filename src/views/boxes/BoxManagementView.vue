@@ -18,6 +18,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import { auth, warehouseApi } from '@/stores/auth'
 import { quantity, number } from '@/api/format'
 import { specRow, inventoryRow } from '@/api/rows'
+import { isNonNegativeInt, isPositiveInt, toDimensions } from '@/api/validate'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSaveAction } from '@/composables/useSaveAction'
 const keyword = ref(''),
@@ -30,7 +31,7 @@ const inventories = ref([]),
 const formModal = ref(null),
   deletingSpec = ref(null),
   stockInSpec = ref(null)
-const { saving, toastMessage, run } = useSaveAction()
+const { saving, toastMessage, run, report } = useSaveAction()
 const columns = [
   { key: 'actions', label: '관리', width: '180px' },
   { key: 'code', label: '박스 규격명', width: '190px', align: 'left' },
@@ -72,13 +73,11 @@ const inventoryStats = computed(() => [
     hint: '등록된 소진일 기준',
   },
 ])
+const SPEC_STATUS = { ACTIVE: '사용 중', INACTIVE: '미사용', CUSTOM: '★' }
 const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
-  { value: 'ACTIVE', label: '사용 중', count: counts.value.ACTIVE ?? 0 },
-  { value: 'INACTIVE', label: '미사용', count: counts.value.INACTIVE ?? 0 },
-  { value: 'CUSTOM', label: '★', count: counts.value.CUSTOM ?? 0 },
+  ...Object.entries(SPEC_STATUS).map(([value, label]) => ({ value, label, count: counts.value[value] ?? 0 })),
 ])
-const rows = computed(() => specs.value)
 const specSummary = computed(() => `총 ${number(summary.value?.totalSpecCount)}개`)
 const supplierOptions = ref([{ value: '', label: '미지정' }])
 // 규격과 재고는 API가 나뉘어 있어 함께 불러온 뒤 규격명(code) 기준으로 한 행에 묶습니다.
@@ -109,9 +108,9 @@ const { loading, error, page, totalPages, refresh } = useListQuery(
     return data.totalPages
   },
 )
-async function loadSuppliers() {
-  // 공급사 조회 API 연결 전에는 저장된 규격의 공급사만 선택할 수 있다.
-  try {
+// 공급사 조회 API 연결 전에는 저장된 규격의 공급사만 선택할 수 있다.
+function loadSuppliers() {
+  return report(async () => {
     const { data } = await warehouseApi('/box-specs', { query: { size: 100 } })
     const suppliers = new Map(
       data.items
@@ -119,9 +118,7 @@ async function loadSuppliers() {
         .map((b) => [b.supplier.id, { value: b.supplier.id, label: b.supplier.name }]),
     )
     supplierOptions.value = [{ value: '', label: '미지정' }, ...suppliers.values()]
-  } catch (cause) {
-    toastMessage.value = cause.message
-  }
+  })
 }
 onMounted(loadSuppliers)
 function openCreate() {
@@ -132,13 +129,12 @@ function openEdit(spec) {
 }
 function handleSave(form) {
   return run(async () => {
-    const dims = [form.width, form.depth, form.height].map(Number)
+    const dims = toDimensions(form)
     if (
       !form.code.trim() ||
       !form.sizeName.trim() ||
-      dims.some((v) => !Number.isInteger(v) || v <= 0) ||
-      !Number.isInteger(Number(form.unitPriceKrw)) ||
-      Number(form.unitPriceKrw) < 0
+      !dims.every(isPositiveInt) ||
+      !isNonNegativeInt(form.unitPriceKrw)
     )
       throw new Error('규격명·사이즈명, 양수 정수 치수와 0 이상 단가를 입력하세요.')
     const target = formModal.value.spec
@@ -190,8 +186,8 @@ function requestDelete() {
 }
 function handleStockInSubmit(form) {
   return run(async () => {
+    if (!isPositiveInt(form.quantity)) throw new Error('입고 수량은 양수 정수로 입력해 주세요.')
     const qty = Number(form.quantity)
-    if (!Number.isInteger(qty) || qty <= 0) throw new Error('입고 수량은 양수 정수로 입력해 주세요.')
     const target = inventories.value.find((item) => item.id === form.specId)
     await warehouseApi('/inventory-receipts', {
       method: 'POST',
@@ -234,7 +230,7 @@ function handleStockInSubmit(form) {
 
     <DataTable
       :columns="columns"
-      :rows="rows"
+      :rows="specs"
       row-key="id"
       min-width="1440px"
       :loading="loading"

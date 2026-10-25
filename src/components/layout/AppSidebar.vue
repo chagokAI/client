@@ -8,6 +8,7 @@ import { auth, warehouseApi } from '@/stores/auth'
 import { notificationRow } from '@/api/rows'
 import { useNotificationSetting } from '@/composables/useNotificationSetting'
 import { useSidebar } from '@/composables/useSidebar'
+import { useToast } from '@/composables/useToast'
 
 const { isCollapsed, isMobileOpen, toggle, expand, openMobile, closeMobile } = useSidebar()
 const route = useRoute()
@@ -59,7 +60,6 @@ const NAV_ITEMS = [
 const navItems = computed(() => NAV_ITEMS.filter((item) => !!item.adminOnly === auth.isAdmin.value))
 const homePath = auth.homePath
 
-// 하위 카테고리가 있는 메뉴는 기본으로 펼쳐 둡니다.
 const openGroups = ref(NAV_ITEMS.filter((item) => item.children).map((item) => item.label))
 
 function hasActiveChild(item) {
@@ -100,20 +100,18 @@ const unreadCount = ref(0)
 // 알림을 끄면 벨의 안 읽은 건수 배지를 숨깁니다. 벨을 눌러 목록을 보는 것은 그대로 됩니다.
 const { isEnabled: notificationsEnabled } = useNotificationSetting()
 const visibleUnreadCount = computed(() => (notificationsEnabled.value ? unreadCount.value : 0))
-const toastMessage = ref('')
+const { toastMessage, report } = useToast()
 const isPanelOpen = ref(false)
 const isProfileOpen = ref(false)
 const bellArea = useTemplateRef('bellArea')
 const profileArea = useTemplateRef('profileArea')
 
-async function loadNotifications() {
-  try {
+function loadNotifications() {
+  return report(async () => {
     const { data } = await warehouseApi('/notifications', { query: { size: 20 } })
     notifications.value = data.items.map(notificationRow)
     unreadCount.value = data.unreadCount
-  } catch (error) {
-    toastMessage.value = error.message
-  }
+  })
 }
 
 function markAllAsRead() {
