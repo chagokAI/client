@@ -78,32 +78,67 @@ onBeforeUnmount(() => {
 const LOW_MONTHS = 1.5
 const HIGH_MONTHS = 12
 const SIZE_LABEL = { S: 'S (소형)', M: 'M (중형)', L: 'L (대형)' }
+const SIZE_NAME = { S: '소형', M: '중형', L: '대형' }
 
 const months = (stock, usage) => (usage > 0 && stock != null ? stock / usage : null)
 const monthsText = (value) => (value == null ? '—' : `${value.toFixed(1)}개월분`)
 const monthsTone = (value) =>
   value == null ? 'muted' : value < LOW_MONTHS ? 'warn' : value >= HIGH_MONTHS ? 'info' : 'ok'
 
+// 큰 수는 만 단위로 줄여 읽습니다. 100만 이상은 정수(761만), 그 아래는 소수 첫째 자리(31.7만)로 보여 줍니다.
+const manText = (value) => {
+  if (value == null) return '—'
+  if (value < 10000) return `${number(value)}개`
+  const man = value / 10000
+  return `${man >= 100 ? Math.round(man) : Number(man.toFixed(1))}만 개`
+}
+
+/**
+ * 막대 전체 = 다음 달 필요량(예측 소모량, 100%), 채워진 부분 = 현재 재고, 나머지 = 부족분.
+ * 충족률(현재 재고 ÷ 필요량)이 낮은 규격이 급하므로 위험 순으로 정렬합니다.
+ * 예측 소모가 없는 규격은 비교 기준이 없어 막대 없이 재고만 보여 주고 맨 뒤로 보냅니다.
+ */
 const sizes = computed(() => {
   const stock = Object.fromEntries((data.value?.stockBySize ?? []).map((s) => [s.sizeClass, s.onHandQty ?? 0]))
   const usage = Object.fromEntries(
     (data.value?.demandForecast?.bySize ?? []).map((s) => [s.sizeClass, s.forecastUsageQty ?? 0]),
   )
-  const rows = ['S', 'M', 'L']
+  return ['S', 'M', 'L']
     .filter((size) => size in stock || size in usage)
     .map((size) => {
-      const value = months(stock[size] ?? 0, usage[size] ?? 0)
-      return { id: size, label: SIZE_LABEL[size], stock: stock[size] ?? 0, usage: usage[size] ?? 0, months: value }
+      const onHand = stock[size] ?? 0
+      const need = usage[size] ?? 0
+      const short = Math.max(0, need - onHand)
+      const coverage = need > 0 ? Math.round((onHand / need) * 100) : null
+      return {
+        id: size,
+        label: SIZE_LABEL[size],
+        stock: onHand,
+        usage: need,
+        months: months(onHand, need),
+        coverage,
+        short,
+        spare: Math.max(0, onHand - need),
+        enough: need > 0 && onHand >= need,
+        // 재고가 필요량을 넘어도 막대는 100%에서 멈춥니다. 남는 양은 오른쪽에 '여유'로 적습니다.
+        fillPct: need > 0 ? Math.min(100, (onHand / need) * 100) : 0,
+      }
     })
-  return rows.map((row) => ({
-    ...row,
-    monthsText: monthsText(row.months),
-    tone: monthsTone(row.months),
-    // 막대 전체 = 현재 재고, 채워진 부분 = 다음 달 예측량을 쓰고 남는 재고(왼쪽), 나머지 빈칸 = 예측량
-    remaining: Math.max(0, row.stock - row.usage),
-    remainingPct: row.stock > 0 ? (Math.max(0, row.stock - row.usage) / row.stock) * 100 : 0,
-  }))
+    .map((row) => ({ ...row, monthsText: monthsText(row.months), tone: monthsTone(row.months) }))
+    .sort((a, b) => (a.coverage ?? Infinity) - (b.coverage ?? Infinity))
 })
+
+// 마우스를 올리면 막대·오른쪽 숫자와 같은 단어로 원래 수량을 보여 줍니다.
+// 막대에는 같은 내용을 aria-label로 이미 달아 두어 이 상자는 화면 표시 전용입니다.
+function tooltipRows(size) {
+  if (size.coverage == null) return [['현재 재고', `${number(size.stock)}개`]]
+  return [
+    ['다음 달 필요량', `${number(size.usage)}개`],
+    ['현재 재고', `${number(size.stock)}개`],
+    size.enough ? ['여유', `${number(size.spare)}개`] : ['부족분', `${number(size.short)}개`],
+    ['충족률', `${size.coverage}%`],
+  ]
+}
 
 const lowSizes = computed(() => sizes.value.filter((size) => size.tone === 'warn'))
 const counts = computed(() => orders.value?.counts ?? {})
@@ -245,37 +280,58 @@ const costItems = computed(() => {
 
     <!-- ② 규격별 재고 vs 예측 + 비용 · 절감 -->
     <div class="dashboard__row dashboard__row--main">
-      <AppCard class="dashboard__compare" title="규격별 다음달 예측 재고량">
+      <AppCard
+        class="dashboard__compare"
+        title="다음 달 필요량 대비 재고"
+        :meta="`${data?.targetMonth ?? '다음 달'} 예측 기준 · 위험 순`"
+      >
         <ul class="compare">
-          <li v-for="size in sizes" :key="size.id" class="compare__row">
-            <div class="compare__head">
-              <span class="compare__label">
-                {{ size.label }}
-                <span class="compare__months">
-                  <template v-if="size.months != null">
-                    <AnimatedNumber :value="size.months.toFixed(1)" />개월분 여유
-                  </template>
-                  <template v-else>—</template>
-                </span>
-              </span>
-              <span class="compare__value">
-                <span class="compare__usage">예측 <AnimatedNumber :value="number(size.usage)" /></span>
-                / 현재 <AnimatedNumber :value="number(size.stock)" />개
-              </span>
+          <li v-for="size in sizes" :key="size.id" class="compare__row" tabindex="0">
+            <div class="compare__tip" aria-hidden="true">
+              <p class="compare__tip-title">{{ size.label }}</p>
+              <dl class="compare__tip-list">
+                <template v-for="[label, value] in tooltipRows(size)" :key="label">
+                  <dt>{{ label }}</dt>
+                  <dd>{{ value }}</dd>
+                </template>
+              </dl>
             </div>
+            <span class="compare__label">
+              <strong>{{ size.id }}</strong>
+              <span class="compare__size">{{ SIZE_NAME[size.id] }}</span>
+            </span>
+
+            <!-- 예측 소모가 없으면 비교할 기준이 없어 막대 대신 안내 문구를 둡니다. -->
+            <span v-if="size.coverage == null" class="compare__none">다음 달 예측 소모 없음</span>
             <div
-              class="stock-bar"
+              v-else
+              class="need-bar"
               role="img"
-              :aria-label="`${size.label} 현재 ${number(size.stock)}개 중 다음 달 예측 ${number(size.usage)}개, 남는 재고 ${number(size.remaining)}개`"
+              :aria-label="`${size.label} 다음 달 필요량 ${number(size.usage)}개 중 현재 재고 ${number(size.stock)}개, 충족률 ${size.coverage}%`"
             >
-              <span class="stock-bar__left" :style="{ width: `${size.remainingPct}%` }" />
+              <span
+                class="need-bar__fill"
+                :class="{ 'need-bar__fill--enough': size.enough }"
+                :style="{ width: `${size.fillPct}%` }"
+              />
             </div>
+
+            <span v-if="size.coverage == null" class="compare__value compare__value--muted">
+              재고 {{ manText(size.stock) }}
+            </span>
+            <span v-else class="compare__value" :class="{ 'compare__value--enough': size.enough }">
+              <strong class="compare__rate"><AnimatedNumber :value="size.coverage" />%</strong>
+              <span class="compare__gap">
+                {{ size.enough ? `${manText(size.spare)} 여유` : `${manText(size.short)} 부족` }}
+              </span>
+            </span>
           </li>
         </ul>
         <p v-if="!sizes.length" class="empty">규격별 재고·예측 데이터가 아직 없어요.</p>
         <p class="compare__note">
-          <span><strong class="compare__key">채워진 부분</strong> = 다음 달 예측량을 쓰고 남는 재고</span>
-          <span>재고 여유 = 현재 재고 ÷ 다음 달 예측</span>
+          <span class="compare__legend"><i class="compare__swatch" />현재 재고</span>
+          <span class="compare__legend"><i class="compare__swatch compare__swatch--short" />부족분</span>
+          <span>막대 끝 = 다음 달 필요량</span>
         </p>
       </AppCard>
 
@@ -522,71 +578,163 @@ const costItems = computed(() => {
   margin-top: auto;
 }
 
+/* 규격 라벨 · 막대 · 오른쪽 숫자를 한 줄에 놓습니다. 막대만 남는 폭을 모두 씁니다. */
 .compare {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.compare__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 7px;
+.compare__row {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+}
+
+.compare__row:focus-visible {
+  outline: 2px solid var(--color-brown);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+/* 행에 마우스를 올리거나 키보드로 옮기면 원래 수량을 상자로 보여 줍니다. */
+.compare__tip {
+  position: absolute;
+  z-index: 10;
+  bottom: calc(100% + 8px);
+  left: 72px;
+  min-width: 240px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 12%);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms ease,
+    visibility 120ms ease;
+}
+
+.compare__row:hover .compare__tip,
+.compare__row:focus-visible .compare__tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 첫 줄은 위가 막히므로 상자를 아래로 내립니다. */
+.compare__row:first-child .compare__tip {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.compare__tip-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 항목은 왼쪽, 수량은 오른쪽에 붙여 자릿수를 비교하기 쉽게 둡니다. */
+.compare__tip-list {
+  display: grid;
+  gap: 4px 16px;
+  grid-template-columns: auto 1fr;
+  margin: 0;
+  font-size: 12px;
+}
+
+.compare__tip-list dt {
+  color: var(--color-text-secondary);
+}
+
+.compare__tip-list dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compare__tip {
+    transition: none;
+  }
 }
 
 .compare__label {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
   font-size: 14px;
-  font-weight: 600;
-}
-
-/* 규격 이름 옆에 재고 여유(몇 개월분)를 작게 붙입니다. */
-.compare__months {
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.compare__value {
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* 예측은 막대의 빈 부분(크림색)과 같은 계열 색으로 씁니다. 크림색 그대로는 흰 배경에서 안 보여 읽을 수 있게 진하게 맞췄습니다. */
-.compare__usage {
-  color: #b8925f;
-}
-
-/* 설명의 '채워진 부분'은 막대 채움과 같은 금색으로 써서 무엇을 가리키는지 바로 보이게 합니다. */
-.compare__key {
-  color: var(--color-gold);
   font-weight: 700;
 }
 
-/* 막대 전체가 현재 재고, 왼쪽에 채워진 부분이 다음 달을 쓰고 남는 재고입니다. */
-.stock-bar {
-  overflow: hidden;
-  height: 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-cream-strong);
+.compare__size {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.stock-bar__left {
+.compare__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--color-danger-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.compare__value--enough {
+  color: var(--color-info-text);
+}
+
+.compare__value--muted {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.compare__rate {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.compare__gap {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+/* 예측 소모가 없는 규격. 막대 자리에 안내 문구만 둡니다. */
+.compare__none {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* 막대 전체가 다음 달 필요량(100%), 채워진 부분이 현재 재고, 남은 부분이 부족분입니다. */
+.need-bar {
+  overflow: hidden;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger-bg);
+}
+
+.need-bar__fill {
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--color-gold);
+  background: var(--color-danger);
   transform-origin: left;
   animation: stock-bar-reveal 400ms cubic-bezier(0.22, 1, 0.36, 1);
   transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 재고가 필요량을 채우면 경고색을 쓸 이유가 없습니다. */
+.need-bar__fill--enough {
+  background: var(--color-info);
 }
 
 @keyframes stock-bar-reveal {
@@ -599,10 +747,28 @@ const costItems = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stock-bar__left {
+  .need-bar__fill {
     animation: none;
     transition: none;
   }
+}
+
+/* 범례의 색 네모는 막대의 두 영역과 같은 색을 씁니다. */
+.compare__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare__swatch {
+  width: 18px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger);
+}
+
+.compare__swatch--short {
+  background: var(--color-danger-bg);
 }
 
 /* 두 식을 세로 구분선으로 나눠 따로 읽히게 합니다. 좁으면 줄을 바꿉니다. */
