@@ -37,7 +37,11 @@ function pinIcon(width, height, className) {
   })
 }
 const PIN_ICON = pinIcon(24, 32, 'center-map__pin')
-const PIN_ICON_SELECTED = pinIcon(30, 40, 'center-map__pin center-map__pin--selected')
+const SELECTED_PIN_HEIGHT = 40
+const PIN_ICON_SELECTED = pinIcon(30, SELECTED_PIN_HEIGHT, 'center-map__pin center-map__pin--selected')
+// fitBounds 는 좌표만 보는데 핀 그림은 좌표 위쪽으로 뻗으므로, 위쪽 여백을 핀 높이만큼 더 둡니다.
+const FIT_PADDING_TOP_LEFT = [16, SELECTED_PIN_HEIGHT + 8]
+const FIT_PADDING_BOTTOM_RIGHT = [16, 16]
 
 const el = ref(null)
 let map = null
@@ -66,7 +70,12 @@ function drawPins() {
       markers.set(c.warehouseId, marker)
       return point
     })
-  if (points.length) map.fitBounds(points, { padding: [16, 16], maxZoom: 12 })
+  if (points.length)
+    map.fitBounds(points, {
+      paddingTopLeft: FIT_PADDING_TOP_LEFT,
+      paddingBottomRight: FIT_PADDING_BOTTOM_RIGHT,
+      maxZoom: 12,
+    })
   else map.setView(KOREA_CENTER, KOREA_ZOOM)
 }
 
