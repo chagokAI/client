@@ -61,7 +61,7 @@ const menuItems = [{ id: 'profile', label: '내 정보' }]
           {{ item.label }}
         </button>
       </li>
-      <li class="profile-menu__setting">
+      <li v-if="auth.canReceiveNotifications.value" class="profile-menu__setting">
         <span>알림 받기</span>
         <ToggleSwitch
           :model-value="notificationsEnabled"

@@ -35,7 +35,7 @@ function refresh() {
         warehouseApi('/dashboard', { signal }),
         warehouseApi('/purchase-orders', {
           signal,
-          query: { from: orderFrom, to: today, page: 0, size: 6, sort: 'createdAt,desc' },
+          query: { from: orderFrom, to: today, historyOnly: true, page: 0, size: 6, sort: 'createdAt,desc' },
         }),
       ]),
     ([dashboard, page]) => {

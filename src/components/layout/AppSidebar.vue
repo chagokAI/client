@@ -173,13 +173,18 @@ async function handleLogout() {
 watch(() => route.fullPath, closeMobile)
 
 watch(
-  () => [auth.session.value?.id, auth.warehouseId.value],
-  () => notificationStore.start(auth.warehouseId.value),
-  { immediate: true },
+  () => [auth.session.value?.id, auth.warehouseId.value, auth.canReceiveNotifications.value],
+  () => {
+    isPanelOpen.value = false
+    toastMessage.value = ''
+    notificationStore.start(auth.warehouseId.value)
+  },
+  { immediate: true, flush: 'sync' },
 )
 
 watch(notificationStore.incoming, (item) => {
-  if (item && notificationsEnabled.value) toastMessage.value = `${item.title} · ${item.message}`
+  if (item && auth.canReceiveNotifications.value && notificationsEnabled.value)
+    toastMessage.value = `${item.title} · ${item.message}`
 })
 
 function refreshNotifications() {
@@ -318,7 +323,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <div class="sidebar__foot">
-        <div ref="bellArea" class="sidebar__slot">
+        <div v-if="auth.canReceiveNotifications.value" ref="bellArea" class="sidebar__slot">
           <button
             class="sidebar__action"
             type="button"

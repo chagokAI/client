@@ -23,7 +23,7 @@ const routes = [
     path: '/notifications',
     name: 'notifications',
     component: () => import('@/views/NotificationsView.vue'),
-    meta: { title: '전체 알림' },
+    meta: { title: '전체 알림', operator: true },
   },
   {
     path: '/boxes/matching',

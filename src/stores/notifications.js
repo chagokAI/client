@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { apiUrl } from '@/api/client'
 import { notificationRow } from '@/api/rows'
-import { warehouseApi } from '@/stores/auth'
+import { auth, warehouseApi } from '@/stores/auth'
 import { createNotificationFeed } from '@/notifications/feed'
 
 const items = ref([])
@@ -23,7 +23,7 @@ function stop() {
 
 function start(warehouseId) {
   stop()
-  if (!warehouseId) return
+  if (!warehouseId || !auth.canReceiveNotifications.value) return
   feed = createNotificationFeed(
     apiUrl(`/warehouses/${warehouseId}/notifications/stream`),
     async (signal) => (await warehouseApi('/notifications', { signal, query: { size: 20 } })).data,

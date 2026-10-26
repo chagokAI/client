@@ -50,7 +50,7 @@ const columns = [
   { key: 'detail', label: '상세보기', width: '8%' },
 ]
 const rows = computed(() => orders.value)
-// 이력에서 자주 찾는 상태만 칩으로 둡니다. 나머지 상태는 표의 [상태] 열에서 확인합니다.
+// 이력 목록과 집계는 승인 완료·입고 완료 발주서만 조회합니다.
 const HISTORY_STATUSES = ['APPROVED', 'RECEIVED']
 const statusOptions = computed(() => [
   { value: 'all', label: '전체', count: counts.value.ALL ?? 0 },
@@ -95,6 +95,7 @@ const { loading, error, page, totalPages, refresh } = useListQuery(
           query: {
             from: from.value,
             to: to.value,
+            historyOnly: true,
             keyword: keyword.value,
             status: statusFilter.value === 'all' ? undefined : statusFilter.value,
             page,

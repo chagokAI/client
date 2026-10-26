@@ -55,6 +55,7 @@ export const auth = {
   canEdit: computed(() => ['OPERATOR', 'DIRECTOR'].includes(session.value?.role)),
   // 메뉴와 라우트는 역할로 가릅니다. DIRECTOR는 관리자 화면만, 그 외는 업무 화면만 봅니다.
   isAdmin: computed(() => session.value?.role === 'DIRECTOR'),
+  canReceiveNotifications: computed(() => !!session.value && session.value.role !== 'DIRECTOR'),
   // 로그인 직후·차단된 주소에서 돌려보낼 역할별 첫 화면입니다.
   homePath: computed(() => (session.value?.role === 'DIRECTOR' ? '/admin/dashboard' : '/dashboard')),
 }
