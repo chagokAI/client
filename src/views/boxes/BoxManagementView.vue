@@ -244,9 +244,11 @@ function handleStockInSubmit(form) {
     >
       <template #cell-code="{ row }">
         <span class="spec-code">
-          <strong>{{ row.code }}</strong>
+          <span class="spec-code__name">
+            <strong>{{ row.code }}</strong>
+            <span v-if="row.custom" class="spec-code__star" title="자체 제작 규격" aria-label="자체 제작 규격">★</span>
+          </span>
           <span class="spec-code__size">{{ row.sizeName }}</span>
-          <span v-if="row.custom" class="spec-code__star" title="자체 제작 규격" aria-label="자체 제작 규격">★</span>
         </span>
       </template>
 
@@ -355,9 +357,16 @@ function handleStockInSubmit(form) {
 </template>
 
 <style scoped>
+/* 규격명: 첫 줄에 규격 코드(+자체 제작 표시), 둘째 줄에 크기 이름. 각 줄은 줄바꿈하지 않습니다. */
 .spec-code {
+  display: inline-grid;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.spec-code__name {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
 }
 
