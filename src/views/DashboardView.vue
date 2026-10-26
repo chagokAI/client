@@ -20,7 +20,6 @@ const data = ref(null)
 const orders = ref(null)
 const loadedAt = ref(null)
 const stockLoadedAt = ref(null)
-const stockState = ref('connecting')
 const stockError = ref('')
 let stockStream
 
@@ -63,11 +62,6 @@ onMounted(() => {
     (cause) => {
       stockError.value = cause.message
     },
-    {
-      onState: (value) => {
-        stockState.value = value
-      },
-    },
   )
 })
 onBeforeUnmount(() => {
@@ -95,7 +89,7 @@ const manText = (value) => {
 
 /**
  * 막대 전체 = 다음 달 필요량(예측 소모량, 100%), 채워진 부분 = 현재 재고, 나머지 = 부족분.
- * 충족률(현재 재고 ÷ 필요량)이 낮은 규격이 급하므로 위험 순으로 정렬합니다.
+ * 확보율(현재 재고 ÷ 필요량)이 낮은 규격이 급하므로 위험 순으로 정렬합니다.
  * 예측 소모가 없는 규격은 비교 기준이 없어 막대 없이 재고만 보여 주고 맨 뒤로 보냅니다.
  */
 const sizes = computed(() => {
@@ -136,7 +130,7 @@ function tooltipRows(size) {
     ['다음 달 필요량', `${number(size.usage)}개`],
     ['현재 재고', `${number(size.stock)}개`],
     size.enough ? ['여유', `${number(size.spare)}개`] : ['부족분', `${number(size.short)}개`],
-    ['충족률', `${size.coverage}%`],
+    ['확보율', `${size.coverage}%`],
   ]
 }
 
@@ -271,8 +265,7 @@ const costItems = computed(() => {
         </p>
         <p class="kpi__hint">{{ kpi.hint }}</p>
         <p v-if="kpi.id === 'stock'" class="kpi__hint">
-          {{ stockLoadedAt ? `재고 기준 ${time(stockLoadedAt)}` : '불러오는 중' }}
-          {{ stockState === 'live' ? ' · 자동 갱신 중' : ' · 연결 확인 중' }}
+          {{ stockLoadedAt ? `${time(stockLoadedAt)} 기준` : '불러오는 중' }}
         </p>
       </div>
     </section>
@@ -307,7 +300,7 @@ const costItems = computed(() => {
               v-else
               class="need-bar"
               role="img"
-              :aria-label="`${size.label} 다음 달 필요량 ${number(size.usage)}개 중 현재 재고 ${number(size.stock)}개, 충족률 ${size.coverage}%`"
+              :aria-label="`${size.label} 다음 달 필요량 ${number(size.usage)}개 중 현재 재고 ${number(size.stock)}개, 확보율 ${size.coverage}%`"
             >
               <span
                 class="need-bar__fill"
@@ -561,7 +554,7 @@ const costItems = computed(() => {
   margin-bottom: 10px;
 }
 
-/* ② 규격별 재고 vs 예측: 옆 '비용 · 절감' 카드 높이만큼 늘어나면 남는 높이를 그래프 줄 사이에 나눠 주고, 설명은 맨 아래에 둡니다. */
+/* ② 규격별 재고 vs 예측: 옆 '비용 · 절감' 카드 높이만큼 늘어나도 그래프는 위에서 시작하고, 설명은 맨 아래에 둡니다. */
 .dashboard__compare :deep(.app-card__body) {
   display: flex;
   flex-direction: column;
@@ -569,9 +562,10 @@ const costItems = computed(() => {
 
 .dashboard__compare .compare {
   flex: 1;
-  align-content: space-evenly;
-  /* 그래프 위아래에 여유를 두어 카드 높이를 10px 늘립니다. */
-  padding: 4px 0 6px;
+  /* 제목 바로 아래에서 그래프를 시작하고, 카드가 옆 카드 높이만큼 늘어나 남는 높이는 아래 설명 위로 보냅니다. */
+  align-content: start;
+  gap: 16px;
+  padding-top: 4px;
 }
 
 .dashboard__compare .compare__note {
@@ -902,7 +896,8 @@ const costItems = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0;
+  /* 옆 '다음 달 필요량 대비 재고' 카드와 높이를 맞추는 기준이라 위아래 여백을 작게 둡니다. */
+  padding: 6px 0;
   border-bottom: 1px solid var(--color-divider);
 }
 
