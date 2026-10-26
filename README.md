@@ -1,4 +1,4 @@
-# 차곡 프런트엔드
+# Chagok Client
 
 A real-time workspace for packaging, inventory, and procurement.
 
